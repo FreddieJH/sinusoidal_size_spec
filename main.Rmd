@@ -1,0 +1,725 @@
+---
+title: "Sinusoidal reef size spectra"
+author: "F. J. Heather"
+date: "23/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+# Installing packages ----------------------------------------------------------
+
+list.of.packages <- 
+  c("tidyverse", 
+    "grid", 
+    "broom",
+    "scales",
+    "lme4",
+    "rnaturalearth",
+    "rnaturalearthdata",
+    "sf",
+    "cowplot",
+    "quantreg",
+    "ggsci"
+  )
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, dependencies = T)
+lapply(list.of.packages, require, character.only = T)
+rm(list.of.packages, new.packages)
+
+# Functions --------------------------------------------------------------------
+
+select    <- dplyr::select
+mutate    <- dplyr::mutate
+summarise <- dplyr::summarise
+rename    <- dplyr::rename
+`%!in%`   <- Negate(`%in%`)
+log2_5 <- function(x) log(x, base=2.5)
+get_adjr2 <- function(mod) mod %>% summary() %>% .$adj.r.squared
+
+save_as_plot <- function(plot, filename, output_type, dpi = 300, height = 10, units ="in", asp_ratio = 1.618){
+  if(!dir.exists("output")){
+    dir.create("output")
+  }
+  if(!dir.exists("output/figs")){
+    dir.create("output/figs")
+  }
+  if("eps" %in% output_type){
+    if(!dir.exists("output/figs/eps")){
+      dir.create("output/figs/eps")
+    }
+    ggplot2::ggsave(paste0("output/figs/eps/", filename,".eps"), plot = plot, device=cairo_ps, fallback_resolution = dpi, height = height, width = (height*asp_ratio), units = units)
+    output_type <- output_type[output_type != "eps"]
+  }
+  for(i in output_type){
+    if(!dir.exists(paste0("output/figs/", i))){
+      dir.create(paste0("output/figs/", i))
+    }
+    cowplot::save_plot(filename = paste0("output/figs/", i,"/", filename,".", i), plot = plot, dpi=dpi, base_height = height)
+  }
+}
+
+# Loading data -----------------------------------------------------------------
+
+main_df   <- read_csv("data/base/main_df.csv")
+enviro_df <- read_csv("data/base/enviro_df.csv")
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This code will recreate all the figures for the study titled "Reef communities show highly linear abundance size spectra, with small predictable inflections"
+
+# Model fitting
+
+## Nonlinear
+
+Nonlinear size spectrum model, fitted to each site: 
+
+$$
+log(N) \sim \beta_{0,s} + \lambda_s \cdot log(M) + A_s \cdot sin(\frac{2 \cdot \pi \cdot log(M)}{D_s}-P_s)
+$$
+where N is the normalised abudnance, M is the middle of the mass bin, $\beta_0$ is the interecept, $\lambda$ is the slope, A is the wave amplitude, D is the wavelength, P is the wave phase and s is the site ID. 
+
+```{r}
+
+# fitting the nonlinear model
+# reasonable start values to avoid wild fits
+fit_sine_nlrq <- function(df, start_A = 2, start_D = 16, start_P = 1, start_beta_0 = 0, start_lambda = -1.78) {
+  
+  quantreg::nlrq(log2_5_norm_density ~ 
+        beta_0 + 
+        lambda*(log2_5_bin_mid) + 
+        A*sin(((2*pi*log2_5_bin_mid)/D)-P), 
+      data=data.frame(df), 
+      start=list(A      = start_A,
+                 D      = start_D,
+                 P      = start_P,
+                 beta_0 = start_beta_0,
+                 lambda = start_lambda)) 
+}
+
+# extracting coefs from the nonlinear model
+get_sine_coefs <- function(sin_mod){
+  sin_mod %>% 
+    coef() %>%
+    as.data.frame(colnames="value") %>%
+    rownames_to_column("coef") %>%
+    rename("value" = ".") %>% 
+    as_tibble()
+}
+
+# used to find local peaks in abundance
+sine_func <- function(x, A, P , D) {
+  A*sin(((2*pi*x)/D)-P)
+}
+
+nlrq_output <- 
+  main_df %>% 
+  select(site_code, bin_mid, norm_density) %>% 
+  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
+  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  na.omit() %>% 
+  group_by(site_code) %>% 
+  nest() %>% 
+  mutate(nlrq_mod = map(.x = data, ~possibly(fit_sine_nlrq, otherwise = NA_real_)(.x))) %>% 
+  mutate(nlrq_coefs = map(.x = nlrq_mod, ~possibly(get_sine_coefs, otherwise = NA_real_)(.x))) %>% 
+  mutate(nlrq_fit = map(.x = nlrq_mod, ~possibly(predict, otherwise = NA_real_)(.x))) %>% 
+  mutate(nlrq_AIC = map_dbl(.x = nlrq_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) 
+
+nlrq_coefs <- 
+  nlrq_output %>% 
+  select(site_code, nlrq_coefs) %>% 
+  unnest(cols = c(nlrq_coefs)) %>% 
+  pivot_wider(names_from = coef, values_from = value) %>% 
+  select_if(~sum(!is.na(.)) > 0) %>% 
+  mutate(peak = optimize(sine_func, 
+                            interval=c(0, 10), 
+                            maximum=TRUE, 
+                            A = A, 
+                            D = D, 
+                            P = P)[1] %>% 
+           as.numeric()) %>% 
+  ungroup()
+
+mod_fits <- 
+  nlrq_output %>% 
+  select(site_code, data,  nlrq_fit) %>% 
+  unnest(cols = c(data,  nlrq_fit)) %>% 
+  select(-c(log2_5_norm_density, log2_5_bin_mid)) %>% 
+  mutate(nlrq_fit = 2.5^nlrq_fit)
+
+
+```
+
+## Linear (per site)
+
+A linear model fitted to each site (for comparison purposes with the nonlinear model)
+
+$$
+log(N) \sim \beta_{0, s} + \lambda_s \cdot log(M) + s
+$$
+```{r}
+
+fit_lm <- function(df){
+  lm(log2_5_norm_density ~ log2_5_bin_mid, 
+     data=data.frame(df)) 
+  
+}
+
+# extracting coefs from the linear model
+get_sine_coefs <- function(lm_mod){
+  lm_mod %>% 
+    coef() %>%
+    as.data.frame(colnames="value") %>%
+    rownames_to_column("coef") %>%
+    rename("value" = ".") %>% 
+    as_tibble()
+}
+
+lm_output <- 
+  main_df %>% 
+  select(site_code, bin_mid, norm_density) %>% 
+  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
+  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  na.omit() %>% 
+  group_by(site_code) %>% 
+  nest() %>% 
+  mutate(lm_mod = map(.x = data, ~possibly(fit_lm, otherwise = NA_real_)(.x))) %>%
+  mutate(lm_AIC = map_dbl(.x = lm_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) %>% 
+  mutate(tidy_lm = map(lm_mod, ~tidy(.x)))
+
+lm_coefs <- 
+  lm_output %>% 
+  select(site_code, tidy_lm) %>% 
+  unnest(cols = tidy_lm)
+
+```
+
+
+## Linear (all sites)
+
+A linear model for all sites combined, to see how much variation in abundance is explained by body mass alone.
+
+$$
+log(N) \sim \beta_{0} + \lambda \cdot log(M)
+$$
+
+
+
+```{r}
+lm_all <- lm(log(norm_density) ~ log(bin_mid), data = main_df) 
+summary(lm_all)
+get_adjr2(lm_all)
+```
+
+
+# Main text
+
+## Figure 1 
+
+```{r}
+
+mypal = ggsci::pal_jco(alpha = 1)(9)
+meio_col <- mypal[2]
+macr_col <- mypal[1]
+both_col <- mypal[4]
+
+dummy_data <- 
+  tibble(x = -10:10, 
+         y = -0.1 + 
+           -1.75*(x) + 
+           5*sin(((2*pi*x)/18)-0.7)) %>% 
+  mutate(type = case_when(x>=0 ~ "macro",
+                          TRUE ~ "meio")) 
+
+dummy_lm <- lm(y~x, data = dummy_data %>% filter(x >=5))
+dummy_lm_intcp <- dummy_lm$coefficients[1]
+dummy_lm_slope <- dummy_lm$coefficients[2]
+
+fish_image <- 
+  magick::image_read_svg("data/base/ian-symbol-serranus-scriba.svg", width = 250) %>% 
+  magick::image_colorize(opacity = 100, color= macr_col)
+
+copepod_image <- 
+  magick::image_read_svg("data/base/ian-symbol-amphipod.svg", width = 350) %>% 
+  magick::image_colorize(opacity = 100, color= meio_col)
+
+animal_images <- 
+  list(draw_image(fish_image, 
+                  x = 8, 
+                  y = -4,  
+                  scale = 5),
+       draw_image(copepod_image, 
+                  x = -6, 
+                  y = 14,  
+                  scale = 3))
+
+fig_1_empty <- 
+  dummy_data %>% 
+  filter(type == "macro") %>% 
+  ggplot(aes(x, y)) + 
+  xlim(c(-8, 10)) +
+  ylim(c(-15, 20)) +
+  xlab("log(body mass)") +
+  ylab("log(abundance)") +
+  theme_classic(24) +
+  theme(panel.grid = element_blank(),
+        panel.border = element_blank(), 
+        axis.text = element_blank(),
+        axis.ticks = element_blank(), 
+        axis.line = element_line(arrow = arrow(type = "open")), 
+        legend.position = "none")
+
+fig_1a <- 
+  fig_1_empty + 
+  geom_line(size = 2, 
+            col = macr_col, 
+            data = dummy_data %>% filter(x >= 5)) +
+  geom_line(size = 2, 
+            col = macr_col, 
+            data = dummy_data %>% filter(x <= 5, type == "macro"), 
+            alpha = 0.3) +
+  draw_image(fish_image, 
+             x = 8, 
+             y = -4,  
+             scale = 5) +
+  geom_abline(intercept = dummy_lm_intcp,
+              slope = dummy_lm_slope, 
+              lty = 2) +
+  geom_text(x = -8, y = -14, label = "Unimodal size spectrum", size = 8, hjust = 0, vjust = 0) +
+  geom_text(x = -1, y = -7, label = "Abundance dip", size = 8, hjust = 0, vjust = 0, 
+            alpha = 0.05, col = macr_col)
+
+
+
+fig_1b <- 
+  fig_1_empty +
+  geom_line(size = 2, col = macr_col) +
+  geom_ribbon(aes(ymin = y, 
+                  ymax = dummy_lm_intcp + dummy_lm_slope*x),
+              data = dummy_data %>% filter(x <= 6, x >= 0),
+              fill = macr_col,
+              alpha = 0.5) +
+  geom_segment(x = -10, 
+               xend = 0, 
+               y = dummy_lm_intcp + dummy_lm_slope*-10, 
+               yend = dummy_lm_intcp + dummy_lm_slope*0,
+               col = meio_col,
+               size = 2) +
+  animal_images +
+  draw_text("Under-sampling bias", 
+            x = 4, 
+            y = 12,
+            size = 20, 
+            col = macr_col) +
+  geom_curve(aes(xend = 1.5, yend = 0.5, x = 4, y = 10), 
+             size = 2, 
+             col = macr_col, 
+             arrow = arrow(length = unit(0.03, "npc")), 
+             lineend="round", 
+             curvature = -0.4) +
+  geom_abline(intercept = dummy_lm_intcp,
+              slope = dummy_lm_slope, 
+              lty = 2) +
+  geom_text(x = -8, y = -14, label = "paste(H[1], ': Under-sampling')", size = 8, hjust = 0, vjust = 0, parse = T)
+
+
+fig_1c <- 
+  fig_1_empty +
+  geom_line(size = 2, col = macr_col) + 
+  geom_line(data = dummy_data %>% filter(type == "meio"),
+            size = 2, 
+            col = meio_col) +
+  animal_images +
+  geom_abline(intercept = 0,
+              slope = -1.6, 
+              lty = 2)+
+  geom_text(x = -8, y = -14, label = "paste(H[2], ': Continuous, nonlinear')", 
+            size = 8, hjust = 0, vjust = 0, parse = T)
+
+fig_1d <- 
+  fig_1_empty +
+  geom_line(size = 2, 
+            col = macr_col, 
+            data = dummy_data %>% filter(x >= 5)) +
+  geom_line(size = 2, 
+            col = macr_col, 
+            data = dummy_data %>% filter(x <= 5, type == "macro"), 
+            alpha = 0.3) +
+  geom_segment(x = -10, 
+               xend = 5, 
+               y = dummy_lm_intcp + dummy_lm_slope*-10, 
+               yend = dummy_lm_intcp + dummy_lm_slope*5,
+               col = meio_col,
+               size = 2) + 
+  geom_segment(x = 0, 
+               xend = 5, 
+               y = dummy_lm_intcp + dummy_lm_slope*0, 
+               yend = dummy_lm_intcp + dummy_lm_slope*5,
+               col = macr_col,
+               size = 2, 
+               lty = 2) +
+  animal_images + 
+  geom_abline(intercept = dummy_lm_intcp,
+              slope = dummy_lm_slope, 
+              lty = 2) +
+  geom_abline(intercept = dummy_lm_intcp,
+              slope = dummy_lm_slope, 
+              lty = 2) +
+  geom_text(x = -8, y = -14, label = "paste(H[3], ': Filling in the gaps')", 
+            size = 8, hjust = 0, vjust = 0, parse = T)
+
+
+fig_1 <- 
+  plot_grid(fig_1a, fig_1b, fig_1c, fig_1d, 
+            labels = c('A', 'B','C', 'D'), 
+            label_size = 24, 
+            ncol = 2)
+
+save_as_plot(plot = fig_1, filename = "fig_1", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_1.png")
+
+```
+
+**Figure 1.** Conceptual diagram showing the dip in abundance of small fishes typically observed in studies of reef fish size structure (A), and three hypothetical spectra (B-D) that would indicate alternative scenarios for the cause of the pattern observed in (A). Where the size spectrum is unimodal (A), a linear function is generally fitted to the descending limb (darker blue), with smaller size classes assumed to be under-sampled (lighter blue) and excluded. A linear overall size spectrum with a substantial gap (B) would indicate under-sampling assumption is likely be the cause, while a continuous curve with a smooth transition through the size classes where the fishes and invertebrates overlap (C) would suggest ecological interactions drive a real non-linearity. A continuous strongly linear spectrum (D) would indicate that epifaunal invertebrates perfectly fill the gaps left by fishes. 
+
+## Figure 2
+
+
+
+```{r}
+
+ecor_labels <- 
+  main_df %>% 
+  group_by(ecoregion) %>% 
+  summarise(mean_lat = mean(lat),
+            mean_lon = mean(lon),
+            .groups = "drop") %>% 
+  mutate(label_ecor = case_when(ecoregion == "Central and Southern Great Barrier Reef" ~ 
+                                  "Central and Southern \n Great Barrier Reef (GBR)",
+                                ecoregion == "Lord Howe and Norfolk Islands" ~
+                                  "Lord Howe & \n Norfolk Islands (LHN)",
+                                ecoregion == "Torres Strait Northern Great Barrier Reef" ~
+                                  "Torres Strait Northern \n Great Barrier Reef (TS)", 
+                                ecoregion == "Bassian" ~
+                                  "Bassian (BA)",
+                                ecoregion == "Cape Howe" ~
+                                  "Cape Howe (CH)",
+                                ecoregion == "Manning-Hawkesbury" ~
+                                  "Manning-Hawkesbury (MH)",
+                                ecoregion == "Tweed-Moreton" ~
+                                  "Solitary Islands (SI)")) %>% 
+  mutate(label_ecor_abbr = case_when(ecoregion == "Central and Southern Great Barrier Reef" ~ "GBR",
+                                     ecoregion == "Lord Howe and Norfolk Islands" ~ "LHN",
+                                     ecoregion == "Torres Strait Northern Great Barrier Reef" ~ "TS", 
+                                     ecoregion == "Bassian" ~ "BA",
+                                     ecoregion == "Cape Howe" ~ "CH",
+                                     ecoregion == "Manning-Hawkesbury" ~ "MH",
+                                     ecoregion == "Tweed-Moreton" ~ "TH")) %>% 
+  mutate(label_pos_lon = case_when(ecoregion == "Cape Howe" ~ mean_lon + 2,
+                                   ecoregion == "Lord Howe and Norfolk Islands" ~ mean_lon -3.2,
+                                   ecoregion == "Tweed-Moreton" ~ mean_lon,
+                                   TRUE ~ mean_lon + 1)) %>% 
+  mutate(label_pos_lat = case_when(ecoregion == "Lord Howe and Norfolk Islands" ~ mean_lat + 2.5,
+                                   ecoregion == "Tweed-Moreton" ~ mean_lat -1,
+                                   TRUE ~ mean_lat))
+
+site_labels <- 
+  main_df %>% 
+  mutate(site_label_abbr = gsub("[^a-zA-Z]", "", site_code)) %>% 
+  mutate(site_label = case_when(site_label_abbr == "SYD" ~ "Sydney (SYD)",
+                                site_label_abbr == "JBMP" ~ "Jervis Bay Marine Park (JBMP)",
+                                site_label_abbr == "SI" ~ "Solitary islands (SI)",
+                                site_label_abbr == "PS" ~ "Port Stevens (PS)",
+                                site_label_abbr == "NSW" ~ "New South Wales (NSW)",
+                                site_label_abbr == "QLD" ~ "Queensland (QLD)",
+                                site_label_abbr == "DE" ~ "Derwent Estuary (DE)",
+                                site_label_abbr == "TAS" ~ "Tasmania (TAS)",
+                                site_label_abbr == "EMR" ~ "Elizabeth & Middleton Reef (EMR)",
+                                site_label_abbr == "KGS" ~ "Kent Group (KG)",
+                                site_label_abbr == "BSS" ~ "Bass Strait (BS)",
+                                site_label_abbr == "NINS" ~ "Ninepin (NIN)",
+                                site_label_abbr == "GBR" ~ "Great Barrier Reef (GBR)",
+  )) %>% 
+  group_by(site_label, site_label_abbr, ecoregion) %>% 
+  summarise(mean_lat = mean(lat), 
+            mean_lon = mean(lon) ) %>% 
+  mutate(label_lon = case_when(site_label_abbr == "EMR" ~ mean_lon - 5, 
+                               site_label_abbr == "TAS" ~ mean_lon + 1.5, 
+                               TRUE ~ mean_lon  + 1)) %>% 
+  mutate(label_lat = case_when(site_label_abbr == "EMR" ~ mean_lat + 1.5, 
+                               site_label_abbr == "SI" ~ mean_lat -0.75, 
+                               site_label_abbr == "BSS" ~ mean_lat + 0.45, 
+                               site_label_abbr == "KGS" ~ mean_lat - 0.35, 
+                               site_label_abbr == "TAS" ~ mean_lat + 0.75, 
+                               site_label_abbr == "NINS" ~ mean_lat - 0.75, 
+                               TRUE ~ mean_lat))
+
+
+fig_2_map_empty <-
+  ggplot(data = ne_countries(scale = "medium", returnclass = "sf")) +
+  geom_sf() +
+  coord_sf(xlim = c(140, 178), ylim = c(-45, -10), expand = FALSE) +
+  geom_text(aes(x = 142, y = -28, label = "Australia"), hjust = 0, vjust = 0.5, size = 5) +
+  theme(legend.position = "none") +
+  theme(plot.background = element_rect(fill = "white", colour = "black")) +
+  theme(axis.title = element_blank()) +
+  theme(panel.background = element_rect(fill = "white")) +
+  theme(panel.grid.major = element_line(colour = "grey90")) 
+
+
+fig_2_map <- 
+  fig_2_map_empty +
+  geom_point(data = main_df, aes(x = lon, y = lat, fill = ecoregion), 
+             size = 6, alpha = 0.5, pch = 21, col = "black") + 
+  geom_text(aes(x = label_lon, y = label_lat, label = site_label, colour = ecoregion), 
+            data = site_labels, check_overlap = F, hjust = 0, vjust = 0.5, size = 5) 
+
+sites_desc_lat <- 
+  main_df %>% 
+  arrange(desc(lat)) %>% 
+  pull(site_code) %>% 
+  unique()
+
+site_ord <- tibble(site_code = sites_desc_lat, id = 1:length(sites_desc_lat))
+
+# creating empty sites in facet so that map can cover them
+empty_sites <- tibble()
+for(i in 1:5){
+  
+  empty_sites_lat <-
+    main_df %>% 
+    left_join(site_ord, by = "site_code") %>% 
+    arrange(id) %>% 
+    filter(id == 5+(5*(i-1))) %>% 
+    pull(lat) %>% 
+    unique()
+  
+  empty_sites <-
+    bind_rows(empty_sites,
+              tibble(site_code = c(paste("empty", i, "_1"), paste("test", i, "_2"), paste("empty", i, "_3")),
+                     lat = empty_sites_lat - c(0.00001, 0.00002,0.00003)))
+}
+
+fig_2_data <- 
+  main_df %>%
+  bind_rows(empty_sites) %>% 
+  mutate(site_ord = factor(site_code, levels = sites_desc_lat)) %>% 
+  left_join(ecor_labels)
+
+# have to do this again for the new dataframe (with empty sites)
+sites_desc_lat_new <- 
+  fig_2_data %>% 
+  arrange(desc(lat)) %>% 
+  pull(site_code) %>% 
+  unique()
+
+fig_2_plots <- 
+  fig_2_data %>% 
+  mutate(site_ord = factor(site_code, levels = sites_desc_lat_new)) %>% 
+  ggplot(aes(bin_mid, norm_density)) +
+  geom_point(data = fig_2_data %>% filter(type == "meio"), col = meio_col) +
+  geom_point(data = fig_2_data %>% filter(type == "macro"), col = macr_col) +
+  geom_point(data = fig_2_data %>% filter(type == "both"), col = both_col) +
+  facet_wrap(~site_ord) + 
+  xlab("log(body mass)") +
+  ylab("log(normalised abundance)") +
+  scale_x_continuous(trans = log_trans(base = 2.5), 
+                     breaks = c(10^c(-5, 0,  5)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_continuous(trans = log_trans(base = 2.5), 
+                     breaks = c(10^c(-10, 0, 10)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  theme_bw(24) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank(), 
+        axis.text = element_text(size = 14), legend.position = "none") +
+  geom_text(aes(x = 10^-5, y = 10^-7, label = site_code, col = ecoregion), 
+            size = 4, hjust = 0, vjust = 0)
+
+
+rect <- grid::rectGrob(gp = grid::gpar(fill = "transparent"), width = .39, height = .09, x = .55, y = 0.125, hjust = 0, vjust = 0.5)
+
+fig_2_legend_graphics <- 
+  list(
+    draw_image(fish_image, 
+               x = 0.35, 
+               y = -0.375, scale = .1) ,
+    draw_image(copepod_image, 
+               x = 0.1, 
+               y = -0.375,  
+               scale = .02) ,
+    draw_image(fish_image %>% magick::image_colorize(opacity = 100, color = both_col), 
+               x = 0.24, 
+               y = -0.375, scale = .06) ,
+    draw_image(copepod_image %>% magick::image_colorize(opacity = 100, color = both_col), 
+               x = 0.17,
+               y = -0.375,  
+               scale = .04) ,
+    draw_label("+", colour = both_col, x = 0.7, y = 0.13, size = 30) ,
+    draw_grob(rect)
+  )
+
+
+fig_2 <-
+  ggdraw() + 
+  draw_plot(fig_2_plots) +
+  geom_rect(aes(xmin = 0.65, xmax = 0.99, ymin = 0.42, ymax = 0.99), fill = "white") +
+  draw_plot(fig_2_map, x = 0.62, y = 0.43, width = 0.4, height = 0.55) +
+  fig_2_legend_graphics
+
+save_as_plot(plot = fig_2, filename = "fig_2", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_2.png")
+
+```
+
+**Figure 2.** Size spectra for rocky and coral reef ecological communities covering 11 orders of magnitude in consumer size, from 3 µg to 150 kg, at 45 sites along the 28° latitude along the Eastern coast of Australia (sites ordered by latitude). Yellow data points represent data from epifaunal sampling, blue data points represent individuals from visual surveys and red data points represent mass bins that contain animals from both sampling methods. 
+
+## Figure 3
+
+
+```{r}
+
+site_lm <- lm(log2_5(norm_density) ~ log2_5(bin_mid) + site_code, data = main_df) 
+
+fig3_data <- 
+  main_df %>% 
+  mutate(lm_residuals = 2.5^site_lm$residuals) %>% 
+  mutate(lat_zone = case_when(abs(lat) < 23.5 ~ "Tropical",
+                              TRUE ~ "Temperate")) %>%
+  mutate(lat_zone = as.factor(lat_zone),
+         site_code = as.factor(site_code)) %>%
+  left_join(enviro_df %>% select(site_code, sstmean), by = "site_code")
+
+fig_3 <-
+  fig3_data %>% 
+  ggplot() +
+  aes(x = bin_mid, 
+      y = lm_residuals, 
+      col = sstmean) +
+  geom_point(alpha = 0.2, aes(group = site_code)) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 1, alpha = 0.5, aes(group = site_code)) +
+  ggsci::scale_colour_gsea(breaks = c(15, 20, 25)) +
+  theme_bw(24) +
+  theme(legend.position = c(0.9, 0.2),
+        legend.background = element_rect(fill = "transparent", colour = "black")) +
+  labs(col = "SST (°C)")+
+  xlab("log(body mass)") +
+  ylab("Linear model residuals") +
+  scale_y_continuous(trans = log_trans(base = 2.5),
+                     breaks = c(10^c(-4:2)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  scale_x_continuous(trans = log_trans(base = 2.5),
+                     breaks = c(10^c(-5:5)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
+  geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) 
+
+save_as_plot(plot = fig_3, filename = "fig_3", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_3.png")
+
+```
+
+**Figure 3.** Sinusoidal patterns in the residuals of the linear model of the size spectrum. Each line represents a LOESS fit for a given site. Each thin line represents a site, with the colour of line representing the mean annual sea surface temperature (SST) at the site. The two thick lines represent the combined LOESS fit for tropical (red) and temperate sites (blue). 
+
+# Supplementary 
+
+## Figure S1.1
+
+```{r}
+fig_s1 <- 
+  mod_fits %>% 
+  left_join(main_df %>% 
+              mutate(lm_fit = 2.5^predict(site_lm))) %>% 
+  mutate(site_ord = factor(site_code, levels = sites_desc_lat)) %>% 
+  ggplot() +
+  aes(bin_mid, norm_density) +
+  geom_point(size = 1.2) +
+  facet_wrap(~site_ord) +
+  geom_line(aes(y = lm_fit), col = "black", size = 1, alpha = 1) +
+  geom_line(aes(y = nlrq_fit), col = "red", size = 1, alpha = 1) +
+  theme_bw(24) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank(), 
+        axis.text = element_text(size = 14), legend.position = "none") +
+  xlab("log(body mass)") +
+  ylab("log(normalised abundance)") +
+  scale_y_continuous(trans = log_trans(base = 2.5), 
+                     breaks = c(10^c(-10, 0, 10)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  scale_x_continuous(trans = log_trans(base = 2.5), 
+                     breaks = c(10^c(-5, 0, 5)),
+                     labels = trans_format("log10", math_format(10^.x))) +
+  geom_text(aes(x = 10^-5, y = 10^-7, label = site_code), size = 4, hjust = 0, vjust = 0)
+
+
+save_as_plot(plot = fig_s1, filename = "fig_s1", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s1.png")
+```
+
+**Figure S1.1** Continuous abundance size spectrum spanning 11 orders of magnitude in body mass, with a fitted linear model (black, Equation S1.1) and non-linear model (red, Equation 1 in main text). 
+
+## Figure S3.1
+
+```{r}
+
+fig_s3_data <- 
+  nlrq_coefs %>% 
+  left_join(enviro_df) %>% 
+  select(peak, sstmean, wave_exposure) %>% 
+  na.omit()
+
+lm_peak <- lm(peak ~ wave_exposure + sstmean, data = fig_s3_data)
+
+fig_s3_pal <- wesanderson::wes_palette(n = 5, name = "Darjeeling1")[c(1:3, 5)]
+
+fig_s3 <- 
+  nlrq_coefs %>% 
+  left_join(enviro_df) %>% 
+  mutate(wave_exposure = as.factor(wave_exposure)) %>% 
+  drop_na(wave_exposure, sstmean) %>% 
+  mutate(fit_maxima = predict(lm_peak)) %>%
+  ggplot(aes(sstmean, peak, col = wave_exposure)) + 
+  geom_point(size = 2) +
+  theme_bw(30) +
+  xlab(expression("mean SST ("*degree*"C)")) +
+  ylab(expression(log[2.5]*"(peak abundance)")) +
+  geom_line(aes(y = fit_maxima), size = 1.5) +
+  scale_color_manual(values = fig_s3_pal) +
+  labs(col = "Wave exposure")
+
+save_as_plot(plot = fig_s3, filename = "fig_s3", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s3.png")
+```
+
+**Figure S3.1** Relative peaks in abundance occur at certain body sizes in the size spectrum. These peaks in abundance can be predicted by wave exposure and SST. No line of best fit is shown for wave exposure = 4 as this group contained only one site.
+
+## Table S4.2
+
+**Table S4.2.** Summary of the most important environmental variables explaining the variance each nonlinear model parameter and the amount of variation explained from a multiple linear regression.
+
+```{r}
+
+enviro_mod_data <- 
+  nlrq_coefs %>% 
+  left_join(enviro_df, by = "site_code")
+
+lm_D      <- lm(D ~ reef_slope, data = enviro_mod_data) 
+lm_A      <- lm(A ~ reef_slope, data = enviro_mod_data) 
+lm_lambda <- lm(lambda ~ wave_exposure  + sstmean, data = enviro_mod_data) 
+lm_peak   <- lm(peak ~ wave_exposure + sstmean, data = enviro_mod_data) 
+
+get_percent_r2 <- function(lm_mod) ((get_adjr2(lm_mod)*100) %>% round()) %>% paste0(., "%")
+
+tribble(~parameter, ~predictors, ~adj_r_squared,
+        "D", "reef_slope", get_percent_r2(lm_D),
+        "A", "reef_slope", get_percent_r2(lm_A),
+        "lambda", "wave_exposure, sstmean", get_percent_r2(lm_lambda),
+        "peak", "wave_exposure, sstmean", get_percent_r2(lm_peak))
+
+```
+
+
