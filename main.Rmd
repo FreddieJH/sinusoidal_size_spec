@@ -36,6 +36,7 @@ summarise <- dplyr::summarise
 rename    <- dplyr::rename
 `%!in%`   <- Negate(`%in%`)
 log2_5 <- function(x) log(x, base=2.5)
+logsqrt2 <- function(x) log(x, base=sqrt(2))
 get_adjr2 <- function(mod) mod %>% summary() %>% .$adj.r.squared
 
 save_as_plot <- function(plot, filename, output_type, dpi = 300, height = 10, units ="in", asp_ratio = 1.618){
@@ -167,16 +168,6 @@ fit_lm <- function(df){
   
 }
 
-# extracting coefs from the linear model
-get_sine_coefs <- function(lm_mod){
-  lm_mod %>% 
-    coef() %>%
-    as.data.frame(colnames="value") %>%
-    rownames_to_column("coef") %>%
-    rename("value" = ".") %>% 
-    as_tibble()
-}
-
 lm_output <- 
   main_df %>% 
   select(site_code, bin_mid, norm_density) %>% 
@@ -197,6 +188,51 @@ lm_coefs <-
 ```
 
 
+
+## Linear (drop-off removed)
+
+```{r}
+
+fit_lm <- function(df){
+  lm(log2_5_norm_density ~ log2_5_bin_mid, 
+     data=data.frame(df)) 
+}
+
+max_dens <- 
+  main_df %>% 
+  filter(type %in% c("macro", "both")) %>% 
+  group_by(site_code) %>% 
+  nest() %>% 
+  mutate(max_dens = map_dbl(data, ~max(.x$norm_density, na.rm = T))) %>% 
+  unnest(cols = data) %>% 
+  filter(max_dens == norm_density) %>% 
+  select(site_code, bin_mid_max = bin_mid)
+
+lm_output2 <- 
+  main_df %>% 
+  left_join(max_dens) %>% 
+  filter(!(type == "macro" & bin_mid < bin_mid_max)) %>% 
+  filter(type != "both") %>% 
+  select(site_code, bin_mid, norm_density) %>% 
+  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
+  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  na.omit() %>% 
+  group_by(site_code) %>% 
+  nest() %>% 
+  mutate(lm2_mod = map(.x = data, ~possibly(fit_lm, otherwise = NA_real_)(.x))) %>%
+  mutate(lm2_AIC = map_dbl(.x = lm2_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) %>% 
+  mutate(tidy_lm = map(lm2_mod, ~tidy(.x)))
+
+lm_coefs2 <- 
+  lm_output2 %>% 
+  select(site_code, tidy_lm) %>% 
+  unnest(cols = tidy_lm)
+
+
+
+```
+
+
 ## Linear (all sites)
 
 A linear model for all sites combined, to see how much variation in abundance is explained by body mass alone.
@@ -212,6 +248,36 @@ lm_all <- lm(log(norm_density) ~ log(bin_mid), data = main_df)
 summary(lm_all)
 get_adjr2(lm_all)
 ```
+## Comparing model fits:
+
+```{r}
+lm_output %>% 
+  select(site_code, lm_AIC) %>% 
+  left_join(nlrq_output %>% 
+              select(site_code, nlrq_AIC)) %>% 
+  left_join(lm_output2 %>% 
+              select(site_code, lm2_AIC)) %>% 
+  filter(lm2_AIC <= lm_AIC, lm2_AIC <= nlrq_AIC)
+
+
+lm_output %>% 
+  select(site_code, lm_AIC) %>% 
+  left_join(nlrq_output %>% 
+              select(site_code, nlrq_AIC)) %>% 
+  left_join(lm_output2 %>% 
+              select(site_code, lm2_AIC)) %>% 
+  filter(lm_AIC <= lm2_AIC, lm_AIC <= nlrq_AIC)
+
+lm_output %>% 
+  select(site_code, lm_AIC) %>% 
+  left_join(nlrq_output %>% 
+              select(site_code, nlrq_AIC)) %>% 
+  left_join(lm_output2 %>% 
+              select(site_code, lm2_AIC)) %>% 
+  filter(nlrq_AIC <= lm_AIC, nlrq_AIC <= lm2_AIC)
+
+```
+
 
 
 # Main text
@@ -630,6 +696,7 @@ knitr::include_graphics("output/figs/png/fig_3.png")
 ## Figure S1.1
 
 ```{r}
+
 fig_s1 <- 
   mod_fits %>% 
   left_join(main_df %>% 
@@ -658,6 +725,7 @@ fig_s1 <-
 
 save_as_plot(plot = fig_s1, filename = "fig_s1", output_type = c("png", "eps", "pdf"))
 knitr::include_graphics("output/figs/png/fig_s1.png")
+
 ```
 
 **Figure S1.1** Continuous abundance size spectrum spanning 11 orders of magnitude in body mass, with a fitted linear model (black, Equation S1.1) and non-linear model (red, Equation 1 in main text). 
@@ -722,4 +790,30 @@ tribble(~parameter, ~predictors, ~adj_r_squared,
 
 ```
 
+
+# Edgar (1990) figure
+
+```{r}
+
+edgar_dat <-
+  tibble(
+    sieve_mm = c(0.5, 0.71, 1.0, 1.4, 2.0, 2.8, 4.0, 5.6) %>% log(base = sqrt(2)),
+       afdw = c(0.025, 0.062, 0.153, 0.38, 0.95, 2.39, 6.0, 14.9) %>% log)
+
+
+lm(afdw~sieve_mm, data = edgar_dat)
+
+edgar_dat %>% 
+  ggplot(aes(sieve_mm, afdw)) +
+  geom_point() + 
+  stat_smooth()
+
+
+logs <- (log(0.5)+log(0.71))/2
+logs <- log(0.5)
+exp((- 1.009) + (2.643)*log(2.5))
+
+
+
+```
 
