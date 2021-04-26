@@ -35,7 +35,7 @@ mutate    <- dplyr::mutate
 summarise <- dplyr::summarise
 rename    <- dplyr::rename
 `%!in%`   <- Negate(`%in%`)
-log2_5 <- function(x) log(x, base=2.5)
+# log2_5 <- function(x) log(x, base=2.5)
 logsqrt2 <- function(x) log(x, base=sqrt(2))
 get_adjr2 <- function(mod) mod %>% summary() %>% .$adj.r.squared
 
@@ -57,8 +57,22 @@ save_as_plot <- function(plot, filename, output_type, dpi = 300, height = 10, un
     if(!dir.exists(paste0("output/figs/", i))){
       dir.create(paste0("output/figs/", i))
     }
-    cowplot::save_plot(filename = paste0("output/figs/", i,"/", filename,".", i), plot = plot, dpi=dpi, base_height = height)
+    cowplot::save_plot(filename = paste0("output/figs/", i,"/", filename,".", i), plot = plot, dpi=dpi, base_height = height, base_asp = asp_ratio)
   }
+}
+
+confidence_interval <- function(vector, interval) {
+  # Standard deviation of sample
+  vec_sd <- sd(vector)
+  # Sample size
+  n <- length(vector)
+  # Mean of sample
+  vec_mean <- mean(vector)
+  # Error according to t distribution
+  error <- qt((interval + 1)/2, df = n - 1) * vec_sd / sqrt(n)
+  # Confidence interval as a vector
+  result <- c("lower" = vec_mean - error, "upper" = vec_mean + error)
+  return(result)
 }
 
 # Loading data -----------------------------------------------------------------
@@ -80,24 +94,37 @@ Nonlinear size spectrum model, fitted to each site:
 $$
 log(N) \sim \beta_{0,s} + \lambda_s \cdot log(M) + A_s \cdot sin(\frac{2 \cdot \pi \cdot log(M)}{D_s}-P_s)
 $$
-where N is the normalised abudnance, M is the middle of the mass bin, $\beta_0$ is the interecept, $\lambda$ is the slope, A is the wave amplitude, D is the wavelength, P is the wave phase and s is the site ID. 
+where N is the normalised abudnance, M is the middle of the size bin, $\beta_0$ is the interecept, $\lambda$ is the slope, A is the wave amplitude, D is the wavelength, P is the wave phase and s is the site ID. 
 
 ```{r}
 
 # fitting the nonlinear model
 # reasonable start values to avoid wild fits
-fit_sine_nlrq <- function(df, start_A = 2, start_D = 16, start_P = 1, start_beta_0 = 0, start_lambda = -1.78) {
+fit_sine_nls <- function(df, start_A = 5, start_D = 17, start_P = 3.2) {
   
-  quantreg::nlrq(log2_5_norm_density ~ 
+  
+  lm_mod <- lm(log(norm_density, base= sqrt(2))   ~ log(bin_mid, base= sqrt(2)), data=df) 
+  start_beta_0 = lm_mod %>% coefficients() %>% .[1] %>% as.numeric()
+  start_lambda = lm_mod %>% coefficients() %>% .[2] %>% as.numeric()
+  
+  
+  nls(logsqrt2_norm_density ~ 
         beta_0 + 
-        lambda*(log2_5_bin_mid) + 
-        A*sin(((2*pi*log2_5_bin_mid)/D)-P), 
+        lambda*(logsqrt2_bin_mid) + 
+        A*sin(((2*pi*logsqrt2_bin_mid)/D)-P), 
       data=data.frame(df), 
       start=list(A      = start_A,
                  D      = start_D,
                  P      = start_P,
                  beta_0 = start_beta_0,
-                 lambda = start_lambda)) 
+                 lambda = start_lambda),
+      upper=c(10,
+              30,
+              10,
+              50,
+              0),
+      lower=c(0,0, 0, 0, -4),
+      algorithm = "port") 
 }
 
 # extracting coefs from the nonlinear model
@@ -115,40 +142,40 @@ sine_func <- function(x, A, P , D) {
   A*sin(((2*pi*x)/D)-P)
 }
 
-nlrq_output <- 
+nls_output <- 
   main_df %>% 
   select(site_code, bin_mid, norm_density) %>% 
-  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
-  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  mutate(logsqrt2_norm_density = logsqrt2(norm_density)) %>% 
+  mutate(logsqrt2_bin_mid = logsqrt2(bin_mid)) %>% 
   na.omit() %>% 
   group_by(site_code) %>% 
   nest() %>% 
-  mutate(nlrq_mod = map(.x = data, ~possibly(fit_sine_nlrq, otherwise = NA_real_)(.x))) %>% 
-  mutate(nlrq_coefs = map(.x = nlrq_mod, ~possibly(get_sine_coefs, otherwise = NA_real_)(.x))) %>% 
-  mutate(nlrq_fit = map(.x = nlrq_mod, ~possibly(predict, otherwise = NA_real_)(.x))) %>% 
-  mutate(nlrq_AIC = map_dbl(.x = nlrq_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) 
+  mutate(nls_mod = map(.x = data, ~possibly(fit_sine_nls, otherwise = NA_real_)(.x))) %>% 
+  mutate(nls_coefs = map(.x = nls_mod, ~possibly(get_sine_coefs, otherwise = NA_real_)(.x))) %>% 
+  mutate(nls_fit = map(.x = nls_mod, ~possibly(predict, otherwise = NA_real_)(.x))) %>% 
+  mutate(nls_AIC = map_dbl(.x = nls_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) 
 
-nlrq_coefs <- 
-  nlrq_output %>% 
-  select(site_code, nlrq_coefs) %>% 
-  unnest(cols = c(nlrq_coefs)) %>% 
+nls_coefs <- 
+  nls_output %>% 
+  select(site_code, nls_coefs) %>% 
+  unnest(cols = c(nls_coefs)) %>% 
   pivot_wider(names_from = coef, values_from = value) %>% 
   select_if(~sum(!is.na(.)) > 0) %>% 
   mutate(peak = optimize(sine_func, 
-                            interval=c(0, 10), 
-                            maximum=TRUE, 
-                            A = A, 
-                            D = D, 
-                            P = P)[1] %>% 
+                         interval=c(10, 20), 
+                         maximum=TRUE, 
+                         A = A, 
+                         D = D, 
+                         P = P)[1] %>% 
            as.numeric()) %>% 
   ungroup()
 
 mod_fits <- 
-  nlrq_output %>% 
-  select(site_code, data,  nlrq_fit) %>% 
-  unnest(cols = c(data,  nlrq_fit)) %>% 
-  select(-c(log2_5_norm_density, log2_5_bin_mid)) %>% 
-  mutate(nlrq_fit = 2.5^nlrq_fit)
+  nls_output %>% 
+  select(site_code, data,  nls_fit) %>% 
+  unnest(cols = c(data,  nls_fit)) %>% 
+  select(-c(logsqrt2_norm_density, logsqrt2_bin_mid)) %>% 
+  mutate(nls_fit = sqrt(2)^nls_fit)
 
 
 ```
@@ -163,7 +190,7 @@ $$
 ```{r}
 
 fit_lm <- function(df){
-  lm(log2_5_norm_density ~ log2_5_bin_mid, 
+  lm(logsqrt2_norm_density ~ logsqrt2_bin_mid, 
      data=data.frame(df)) 
   
 }
@@ -171,19 +198,28 @@ fit_lm <- function(df){
 lm_output <- 
   main_df %>% 
   select(site_code, bin_mid, norm_density) %>% 
-  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
-  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  mutate(logsqrt2_norm_density = logsqrt2(norm_density)) %>% 
+  mutate(logsqrt2_bin_mid = logsqrt2(bin_mid)) %>% 
   na.omit() %>% 
   group_by(site_code) %>% 
   nest() %>% 
   mutate(lm_mod = map(.x = data, ~possibly(fit_lm, otherwise = NA_real_)(.x))) %>%
   mutate(lm_AIC = map_dbl(.x = lm_mod, .f = ~possibly(AIC, otherwise = NA_real_)(.x))) %>% 
+  mutate(lm_fit = map(.x = lm_mod, ~possibly(predict, otherwise = NA_real_)(.x))) %>% 
   mutate(tidy_lm = map(lm_mod, ~tidy(.x)))
 
 lm_coefs <- 
   lm_output %>% 
   select(site_code, tidy_lm) %>% 
   unnest(cols = tidy_lm)
+
+lm_fits <- 
+  lm_output %>% 
+  select(site_code, data,  lm_fit) %>% 
+  unnest(cols = c(data,  lm_fit)) %>% 
+  select(-c(logsqrt2_norm_density, logsqrt2_bin_mid)) %>% 
+  mutate(lm_fit = sqrt(2)^lm_fit)
+
 
 ```
 
@@ -194,7 +230,7 @@ lm_coefs <-
 ```{r}
 
 fit_lm <- function(df){
-  lm(log2_5_norm_density ~ log2_5_bin_mid, 
+  lm(logsqrt2_norm_density ~ logsqrt2_bin_mid, 
      data=data.frame(df)) 
 }
 
@@ -214,8 +250,8 @@ lm_output2 <-
   filter(!(type == "macro" & bin_mid < bin_mid_max)) %>% 
   filter(type != "both") %>% 
   select(site_code, bin_mid, norm_density) %>% 
-  mutate(log2_5_norm_density = log2_5(norm_density)) %>% 
-  mutate(log2_5_bin_mid = log2_5(bin_mid)) %>% 
+  mutate(logsqrt2_norm_density = logsqrt2(norm_density)) %>% 
+  mutate(logsqrt2_bin_mid = logsqrt2(bin_mid)) %>% 
   na.omit() %>% 
   group_by(site_code) %>% 
   nest() %>% 
@@ -228,14 +264,12 @@ lm_coefs2 <-
   select(site_code, tidy_lm) %>% 
   unnest(cols = tidy_lm)
 
-
-
 ```
 
 
 ## Linear (all sites)
 
-A linear model for all sites combined, to see how much variation in abundance is explained by body mass alone.
+A linear model for all sites combined, to see how much variation in abundance is explained by body size alone.
 
 $$
 log(N) \sim \beta_{0} + \lambda \cdot log(M)
@@ -243,38 +277,46 @@ $$
 
 
 
-```{r}
-lm_all <- lm(log(norm_density) ~ log(bin_mid), data = main_df) 
-summary(lm_all)
-get_adjr2(lm_all)
-```
-## Comparing model fits:
+## Comparing model fits
 
 ```{r}
-lm_output %>% 
+
+decplaces <- function(x) format(round(x, 1), nsmall = 1)
+
+lm_comparison_data <- 
+  lm_output %>% 
   select(site_code, lm_AIC) %>% 
-  left_join(nlrq_output %>% 
-              select(site_code, nlrq_AIC)) %>% 
+  left_join(nls_output %>% 
+              select(site_code, nls_AIC)) %>% 
   left_join(lm_output2 %>% 
               select(site_code, lm2_AIC)) %>% 
-  filter(lm2_AIC <= lm_AIC, lm2_AIC <= nlrq_AIC)
+  mutate(hypothesis = case_when(lm2_AIC < lm_AIC & lm2_AIC < nls_AIC ~ "H1",
+                                nls_AIC <= lm_AIC & nls_AIC <= lm2_AIC ~ "H2", 
+                                lm_AIC <= lm2_AIC & lm_AIC <= nls_AIC ~ "NA")) %>% 
+  mutate(lm_AIC_delta = lm_AIC-lm_AIC) %>% 
+  mutate(nls_AIC_delta = nls_AIC-lm_AIC) %>% 
+  mutate(lm2_AIC_delta = lm2_AIC-lm_AIC) %>% 
+  mutate(lm_AIC_delta = lm_AIC_delta %>% decplaces) %>% 
+  mutate(nls_AIC_delta = nls_AIC_delta %>% decplaces) %>% 
+  mutate(lm2_AIC_delta = lm2_AIC_delta %>% decplaces) %>% 
+  select(site_code, lm_AIC_delta, nls_AIC_delta, lm2_AIC_delta, hypothesis)
+
+lm_comparison_data %>% 
+  write_csv("data/processed/lm_comparison.csv")
 
 
-lm_output %>% 
-  select(site_code, lm_AIC) %>% 
-  left_join(nlrq_output %>% 
-              select(site_code, nlrq_AIC)) %>% 
-  left_join(lm_output2 %>% 
-              select(site_code, lm2_AIC)) %>% 
-  filter(lm_AIC <= lm2_AIC, lm_AIC <= nlrq_AIC)
+# H1: Sampling bias
+lm_comparison_data %>% 
+  filter(hypothesis == "H1")
 
-lm_output %>% 
-  select(site_code, lm_AIC) %>% 
-  left_join(nlrq_output %>% 
-              select(site_code, nlrq_AIC)) %>% 
-  left_join(lm_output2 %>% 
-              select(site_code, lm2_AIC)) %>% 
-  filter(nlrq_AIC <= lm_AIC, nlrq_AIC <= lm2_AIC)
+# H2: Nonlinear, continuous
+lm_comparison_data %>% 
+  filter(hypothesis == "H2")
+
+# H3: Combining data
+lm_comparison_data %>% 
+  filter(hypothesis == "H3")
+# but the site does not contain any "both" type bins - i.e. is just linear in general
 
 ```
 
@@ -283,6 +325,7 @@ lm_output %>%
 # Main text
 
 ## Figure 1 
+
 
 ```{r}
 
@@ -327,7 +370,7 @@ fig_1_empty <-
   ggplot(aes(x, y)) + 
   xlim(c(-8, 10)) +
   ylim(c(-15, 20)) +
-  xlab("log(body mass)") +
+  xlab("log(body size)") +
   ylab("log(abundance)") +
   theme_classic(24) +
   theme(panel.grid = element_blank(),
@@ -452,6 +495,207 @@ knitr::include_graphics("output/figs/png/fig_1.png")
 
 ## Figure 2
 
+```{r}
+# GBR27
+# NIN-S1
+site_plot_dat <- main_df %>% filter(site_code == "GBR27") %>% left_join(mod_fits) %>% left_join(lm_fits)
+
+fig_2a <- 
+  site_plot_dat %>% 
+  mutate(type = factor(type, levels = c("meio", "macro", "both"))) %>% 
+  ggplot(aes(bin_mid %>% logsqrt2, norm_density%>% logsqrt2)) +
+  geom_point(aes(col = type), size = 2) +
+  # geom_point(data = site_plot_dat %>% filter(type == "meio"), col = meio_col, size = 2) +
+  # geom_point(data = site_plot_dat %>% filter(type == "macro"), col = macr_col, size = 2) +
+  # geom_point(data = site_plot_dat %>% filter(type == "both"), col = both_col, size = 2) +
+  geom_line(aes(y = nls_fit %>% logsqrt2), size = 1.2) + 
+  geom_line(aes(y = lm_fit %>% logsqrt2), lty= 2, size = 1) + 
+  xlab("log(body size)") +
+  ylab("log(normalised abundance)") +
+  theme_bw(24) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank(), 
+        axis.text = element_text(size = 14), legend.position = "none") +
+  geom_text(aes(x = -5, y = -45, label = "paste(H[2], ': Nonlinear size spectrum, n = 41 sites')"), 
+            size = 8, hjust = 0, vjust = 0, parse = T)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        # axis.text.x = element_blank(), 
+        # axis.ticks.x = element_blank(),
+        axis.title.x = element_blank()
+  ) +
+  theme(legend.position = c(0.99, 0.99),
+        legend.justification=c(1, 1),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 18),
+        legend.text.align = 1,
+        legend.background = element_rect(fill = "transparent", colour = "transparent")) +
+  scale_color_manual(name = element_blank(), 
+                     labels = c("Epifaunal sampling (ES)", "Visual survey (VS)", "ES + VS" ),
+                     values = c(meio_col, macr_col, both_col)) +
+  guides(col = guide_legend(title.position = "top", 
+                            # hjust = 0.5 centres the title horizontally
+                            title.hjust = 0.8,
+                            label.position = "left")) 
+
+site_plot_dat2 <- main_df %>% filter(site_code == "NIN-S1") %>% left_join(mod_fits) %>% left_join(lm_fits)
+
+fig_2b <- 
+  site_plot_dat2 %>% 
+  mutate(type = case_when(type == "macro" & bin_mid < 54.6 ~ "ommitted",
+                          TRUE ~ type)) %>% 
+  mutate(type = factor(type, levels = c("meio", "macro", "ommitted"))) %>% 
+  ggplot(aes(bin_mid %>% logsqrt2, norm_density%>% logsqrt2)) +
+  geom_point(aes(col = type), size = 2) +
+  # geom_point(data = site_plot_dat2 %>% filter(type == "meio"), col = meio_col, size = 2) +
+  # geom_point(data = site_plot_dat2 %>% filter(type == "macro"), col = macr_col, size = 2) +
+  # geom_point(data = site_plot_dat2 %>% filter(type == "both"), col = both_col, size = 2) +
+  # geom_point(data = site_plot_dat2 %>% filter(), col = "grey80", size = 2) +
+  # geom_line(aes(y = nls_fit %>% logsqrt2)) + 
+  geom_line(aes(y = lm_fit %>% logsqrt2), size = 1.2) + 
+  xlab("log(body size)") +
+  ylab("log(normalised abundance)") +
+  theme_bw(24) +
+  theme(strip.background = element_blank(),
+        strip.text.x = element_blank(), 
+        axis.text = element_text(size = 14), legend.position = "none") +
+  geom_text(aes(x = -5, y = -45, label = "paste(H[1], ': Sampling bias, n = 3 sites')"), 
+            size = 8, hjust = 0, vjust = 0, parse = T) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()
+  ) +
+  theme(legend.position = c(0.99, 0.99),
+        legend.justification=c(1, 1),
+        legend.text = element_text(size = 14),
+        legend.title = element_text(size = 18),
+        legend.background = element_rect(fill = "transparent", colour = "transparent")) +
+  scale_color_manual(name = element_blank(), 
+                     labels = c("Epifaunal sampling (ES)", "Visual survey (VS)", "Omitted VS" ),
+                     values = c(meio_col, macr_col, "grey80")) +
+  guides(col = guide_legend(title.position = "top", 
+                            # hjust = 0.5 centres the title horizontally
+                            title.hjust = 0.8,
+                            label.position = "left")) 
+
+site_plot_dat2 <- main_df %>% filter(site_code == "NIN-S1") %>% left_join(mod_fits) %>% left_join(lm_fits)
+
+
+
+fig_2 <- 
+  plot_grid(fig_2a, fig_2b,
+            # labels = c('A', 'B'),
+            # label_size = 24,
+            ncol = 1)
+
+save_as_plot(plot = fig_2, filename = "fig_2", output_type = c("png", "eps", "pdf"), asp_ratio = 1.618/2)
+knitr::include_graphics("output/figs/png/fig_2.png")
+
+```
+
+
+## Figure 3
+
+
+```{r}
+
+site_lm <- lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid) + site_code, data = main_df) 
+
+fig3_data <- 
+  main_df %>% 
+  mutate(lm_residuals = sqrt(2)^site_lm$residuals) %>% 
+  mutate(lat_zone = case_when(abs(lat) < 23.5 ~ "Tropical",
+                              TRUE ~ "Temperate")) %>%
+  mutate(lat_zone = as.factor(lat_zone),
+         site_code = as.factor(site_code)) %>%
+  left_join(enviro_df %>% select(site_code, sstmean), by = "site_code")
+
+fig_3 <-
+  fig3_data %>% 
+  ggplot() +
+  aes(x = bin_mid %>% logsqrt2, 
+      y = lm_residuals %>% logsqrt2, 
+      col = sstmean) +
+  geom_point(alpha = 0.2, aes(group = site_code)) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 1, alpha = 0.5, aes(group = site_code)) +
+  ggsci::scale_colour_gsea(breaks = c(15, 20, 25)) +
+  theme_bw(24) +
+  theme(legend.position = c(0.9, 0.2),
+        legend.background = element_rect(fill = "transparent", colour = "black")) +
+  labs(col = "SST (°C)")+
+  xlab("log(body size, mm)") +
+  ylab("Linear model residuals") +
+  # scale_y_continuous(trans = log_trans(base = sqrt(2)),
+  #                    breaks = c(10^c(-4:2)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  # scale_x_continuous(trans = log_trans(base = sqrt(2)),
+  #                    breaks = c(10^c(-5:5)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
+  geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
+
+save_as_plot(plot = fig_3, filename = "fig_3", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_3.png")
+
+```
+
+**Figure 3.** Sinusoidal patterns in the residuals of the linear model of the size spectrum. Each line represents a LOESS fit for a given site. Each thin line represents a site, with the colour of line representing the mean annual sea surface temperature (SST) at the site. The two thick lines represent the combined LOESS fit for tropical (red) and temperate sites (blue). 
+
+
+## Information for text
+
+
+
+```{r}
+# How much variation in Abundance is explained by body size? (all sites combined)
+lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid), data = main_df) %>% 
+  get_adjr2() %>% 
+  `*`(100)
+
+# Macro only data
+lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid), data = read_csv("data/base/main_df_macroonly.csv") ) %>% 
+  get_adjr2() %>% 
+  `*`(100)
+
+# Meio only data
+lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid), data = read_csv("data/base/main_df_meioonly.csv") ) %>% 
+  get_adjr2() %>% 
+  `*`(100)
+
+macro_taxa <-
+  read_csv("data/base/macro_taxa.csv") %>% 
+  group_by(species_name, class) %>% 
+  summarise(max_obs_length_cm = max(size_class, na.rm = T)) %>% 
+  arrange(desc(max_obs_length_cm))
+
+meio_taxa <- 
+  data.table::fread("data/base/epi_taxa.csv") %>% 
+  filter(BR.TAXA != "unknown worm") %>% 
+  select(BR.TAXA) %>% 
+  distinct() %>% 
+  as_tibble() %>% 
+  rename("Broad Taxa" = BR.TAXA) 
+  
+write_csv(macro_taxa, "data/processed/macro_taxa_list.csv")
+write_csv(meio_taxa, "data/processed/meio_taxa_list.csv")
+
+
+nls_coefs %>% 
+  mutate(ppsr = sqrt(2)^(D/2)) %>% 
+  summarise(confintmean = mean(ppsr), 
+              confint = confidence_interval(ppsr, 0.95)) %>% 
+  mutate(diff = confint - confintmean)
+
+
+```
+
+
+# Supplementary 
+
+## Figure S1.1
 
 
 ```{r}
@@ -523,7 +767,7 @@ site_labels <-
                                TRUE ~ mean_lat))
 
 
-fig_2_map_empty <-
+fig_s1_1_map_empty <-
   ggplot(data = ne_countries(scale = "medium", returnclass = "sf")) +
   geom_sf() +
   coord_sf(xlim = c(140, 178), ylim = c(-45, -10), expand = FALSE) +
@@ -535,12 +779,14 @@ fig_2_map_empty <-
   theme(panel.grid.major = element_line(colour = "grey90")) 
 
 
-fig_2_map <- 
-  fig_2_map_empty +
+fig_s1_1_map <- 
+  fig_s1_1_map_empty +
   geom_point(data = main_df, aes(x = lon, y = lat, fill = ecoregion), 
              size = 6, alpha = 0.5, pch = 21, col = "black") + 
   geom_text(aes(x = label_lon, y = label_lat, label = site_label, colour = ecoregion), 
-            data = site_labels, check_overlap = F, hjust = 0, vjust = 0.5, size = 5) 
+            data = site_labels, check_overlap = F, hjust = 0, vjust = 0.5, size = 5) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
 
 sites_desc_lat <- 
   main_df %>% 
@@ -568,46 +814,48 @@ for(i in 1:5){
                      lat = empty_sites_lat - c(0.00001, 0.00002,0.00003)))
 }
 
-fig_2_data <- 
+fig_s1_1_data <- 
   main_df %>%
   bind_rows(empty_sites) %>% 
   mutate(site_ord = factor(site_code, levels = sites_desc_lat)) %>% 
-  left_join(ecor_labels)
+  left_join(ecor_labels)  
 
 # have to do this again for the new dataframe (with empty sites)
 sites_desc_lat_new <- 
-  fig_2_data %>% 
+  fig_s1_1_data %>% 
   arrange(desc(lat)) %>% 
   pull(site_code) %>% 
   unique()
 
-fig_2_plots <- 
-  fig_2_data %>% 
+fig_s1_1_plots <- 
+  fig_s1_1_data %>% 
   mutate(site_ord = factor(site_code, levels = sites_desc_lat_new)) %>% 
-  ggplot(aes(bin_mid, norm_density)) +
-  geom_point(data = fig_2_data %>% filter(type == "meio"), col = meio_col) +
-  geom_point(data = fig_2_data %>% filter(type == "macro"), col = macr_col) +
-  geom_point(data = fig_2_data %>% filter(type == "both"), col = both_col) +
+  ggplot(aes(bin_mid %>% logsqrt2, norm_density%>% logsqrt2)) +
+  geom_point(data = fig_s1_1_data %>% filter(type == "meio"), col = meio_col) +
+  geom_point(data = fig_s1_1_data %>% filter(type == "macro"), col = macr_col) +
+  geom_point(data = fig_s1_1_data %>% filter(type == "both"), col = both_col) +
   facet_wrap(~site_ord) + 
-  xlab("log(body mass)") +
+  xlab("log(body size)") +
   ylab("log(normalised abundance)") +
-  scale_x_continuous(trans = log_trans(base = 2.5), 
-                     breaks = c(10^c(-5, 0,  5)),
-                     labels = trans_format("log10", math_format(10^.x))) +
-  scale_y_continuous(trans = log_trans(base = 2.5), 
-                     breaks = c(10^c(-10, 0, 10)),
-                     labels = trans_format("log10", math_format(10^.x))) +
+  # scale_x_continuous(trans = log_trans(base = sqrt(2)), 
+  #                    breaks = c(10^c(-5, 0,  5)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  # scale_y_continuous(trans = log_trans(base = sqrt(2)), 
+  #                    breaks = c(10^c(-5, 0, 5, )),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
   theme_bw(24) +
   theme(strip.background = element_blank(),
         strip.text.x = element_blank(), 
         axis.text = element_text(size = 14), legend.position = "none") +
-  geom_text(aes(x = 10^-5, y = 10^-7, label = site_code, col = ecoregion), 
-            size = 4, hjust = 0, vjust = 0)
+  geom_text(aes(x = -5, y = -45, label = site_code, col = ecoregion), 
+            size = 4, hjust = 0, vjust = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
 
 
 rect <- grid::rectGrob(gp = grid::gpar(fill = "transparent"), width = .39, height = .09, x = .55, y = 0.125, hjust = 0, vjust = 0.5)
 
-fig_2_legend_graphics <- 
+fig_s1_1_legend_graphics <- 
   list(
     draw_image(fish_image, 
                x = 0.35, 
@@ -628,139 +876,94 @@ fig_2_legend_graphics <-
   )
 
 
-fig_2 <-
+fig_s1_1 <-
   ggdraw() + 
-  draw_plot(fig_2_plots) +
+  draw_plot(fig_s1_1_plots) +
   geom_rect(aes(xmin = 0.65, xmax = 0.99, ymin = 0.42, ymax = 0.99), fill = "white") +
-  draw_plot(fig_2_map, x = 0.62, y = 0.43, width = 0.4, height = 0.55) +
-  fig_2_legend_graphics
+  draw_plot(fig_s1_1_map, x = 0.615, y = 0.432, width = 0.4, height = 0.55) +
+  fig_s1_1_legend_graphics
 
-save_as_plot(plot = fig_2, filename = "fig_2", output_type = c("png", "eps", "pdf"))
-knitr::include_graphics("output/figs/png/fig_2.png")
-
-```
-
-**Figure 2.** Size spectra for rocky and coral reef ecological communities covering 11 orders of magnitude in consumer size, from 3 µg to 150 kg, at 45 sites along the 28° latitude along the Eastern coast of Australia (sites ordered by latitude). Yellow data points represent data from epifaunal sampling, blue data points represent individuals from visual surveys and red data points represent mass bins that contain animals from both sampling methods. 
-
-## Figure 3
-
-
-```{r}
-
-site_lm <- lm(log2_5(norm_density) ~ log2_5(bin_mid) + site_code, data = main_df) 
-
-fig3_data <- 
-  main_df %>% 
-  mutate(lm_residuals = 2.5^site_lm$residuals) %>% 
-  mutate(lat_zone = case_when(abs(lat) < 23.5 ~ "Tropical",
-                              TRUE ~ "Temperate")) %>%
-  mutate(lat_zone = as.factor(lat_zone),
-         site_code = as.factor(site_code)) %>%
-  left_join(enviro_df %>% select(site_code, sstmean), by = "site_code")
-
-fig_3 <-
-  fig3_data %>% 
-  ggplot() +
-  aes(x = bin_mid, 
-      y = lm_residuals, 
-      col = sstmean) +
-  geom_point(alpha = 0.2, aes(group = site_code)) +
-  geom_line(stat= "smooth", method = "loess", se=F, size = 1, alpha = 0.5, aes(group = site_code)) +
-  ggsci::scale_colour_gsea(breaks = c(15, 20, 25)) +
-  theme_bw(24) +
-  theme(legend.position = c(0.9, 0.2),
-        legend.background = element_rect(fill = "transparent", colour = "black")) +
-  labs(col = "SST (°C)")+
-  xlab("log(body mass)") +
-  ylab("Linear model residuals") +
-  scale_y_continuous(trans = log_trans(base = 2.5),
-                     breaks = c(10^c(-4:2)),
-                     labels = trans_format("log10", math_format(10^.x))) +
-  scale_x_continuous(trans = log_trans(base = 2.5),
-                     breaks = c(10^c(-5:5)),
-                     labels = trans_format("log10", math_format(10^.x))) +
-  geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
-  geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) 
-
-save_as_plot(plot = fig_3, filename = "fig_3", output_type = c("png", "eps", "pdf"))
-knitr::include_graphics("output/figs/png/fig_3.png")
+save_as_plot(plot = fig_s1_1, filename = "fig_s1_1", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s1_1.png")
 
 ```
 
-**Figure 3.** Sinusoidal patterns in the residuals of the linear model of the size spectrum. Each line represents a LOESS fit for a given site. Each thin line represents a site, with the colour of line representing the mean annual sea surface temperature (SST) at the site. The two thick lines represent the combined LOESS fit for tropical (red) and temperate sites (blue). 
 
-# Supplementary 
-
-## Figure S1.1
+**Figure 1.1** Size spectra for rocky and coral reef ecological communities covering 11 orders of magnitude in consumer size, from 3 µg to 150 kg, at 45 sites along the 28° latitude along the Eastern coast of Australia (sites ordered by latitude). Yellow data points represent data from epifaunal sampling, blue data points represent individuals from visual surveys and red data points represent size bins that contain animals from both sampling methods. 
 
 ```{r}
 
-fig_s1 <- 
+fig_s1_2 <- 
   mod_fits %>% 
   left_join(main_df %>% 
-              mutate(lm_fit = 2.5^predict(site_lm))) %>% 
+              mutate(lm_fit = sqrt(2)^predict(site_lm))) %>% 
   mutate(site_ord = factor(site_code, levels = sites_desc_lat)) %>% 
   ggplot() +
-  aes(bin_mid, norm_density) +
+  aes(bin_mid %>% logsqrt2, norm_density %>% logsqrt2) +
   geom_point(size = 1.2) +
   facet_wrap(~site_ord) +
-  geom_line(aes(y = lm_fit), col = "black", size = 1, alpha = 1) +
-  geom_line(aes(y = nlrq_fit), col = "red", size = 1, alpha = 1) +
+  geom_line(aes(y = lm_fit %>% logsqrt2), col = "black", size = 1, alpha = 0.8) +
+  geom_line(aes(y = nls_fit %>% logsqrt2), col = "red", size = 1, alpha = 0.8) +
   theme_bw(24) +
   theme(strip.background = element_blank(),
         strip.text.x = element_blank(), 
         axis.text = element_text(size = 14), legend.position = "none") +
-  xlab("log(body mass)") +
+  xlab("log(body size)") +
   ylab("log(normalised abundance)") +
-  scale_y_continuous(trans = log_trans(base = 2.5), 
-                     breaks = c(10^c(-10, 0, 10)),
-                     labels = trans_format("log10", math_format(10^.x))) +
-  scale_x_continuous(trans = log_trans(base = 2.5), 
-                     breaks = c(10^c(-5, 0, 5)),
-                     labels = trans_format("log10", math_format(10^.x))) +
-  geom_text(aes(x = 10^-5, y = 10^-7, label = site_code), size = 4, hjust = 0, vjust = 0)
+  # scale_y_continuous(trans = log_trans(base = sqrt(2)), 
+  #                    breaks = c(10^c(-10, 0, 10)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  # scale_x_continuous(trans = log_trans(base = sqrt(2)), 
+  #                    breaks = c(10^c(-5, 0, 5)),
+  # labels = trans_format("log10", math_format(10^.x))) +
+  geom_text(aes(x = -5, y = -45, label = site_code), size = 4, hjust = 0, vjust = 0)+
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
 
 
-save_as_plot(plot = fig_s1, filename = "fig_s1", output_type = c("png", "eps", "pdf"))
-knitr::include_graphics("output/figs/png/fig_s1.png")
+save_as_plot(plot = fig_s1_2, filename = "fig_s1_2", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s1_2.png")
 
 ```
 
-**Figure S1.1** Continuous abundance size spectrum spanning 11 orders of magnitude in body mass, with a fitted linear model (black, Equation S1.1) and non-linear model (red, Equation 1 in main text). 
+**Figure S1.1** Continuous abundance size spectrum spanning 11 orders of magnitude in body size, with a fitted linear model (black, Equation S1.1) and non-linear model (red, Equation 1 in main text). 
 
 ## Figure S3.1
 
 ```{r}
 
 fig_s3_data <- 
-  nlrq_coefs %>% 
+  nls_coefs %>% 
   left_join(enviro_df) %>% 
   select(peak, sstmean, wave_exposure) %>% 
   na.omit()
 
-lm_peak <- lm(peak ~ wave_exposure + sstmean, data = fig_s3_data)
+lm_peak_basic <- lm(peak ~ sstmean, data = fig_s3_data)
 
 fig_s3_pal <- wesanderson::wes_palette(n = 5, name = "Darjeeling1")[c(1:3, 5)]
 
 fig_s3 <- 
-  nlrq_coefs %>% 
+  nls_coefs %>% 
   left_join(enviro_df) %>% 
   mutate(wave_exposure = as.factor(wave_exposure)) %>% 
   drop_na(wave_exposure, sstmean) %>% 
-  mutate(fit_maxima = predict(lm_peak)) %>%
-  ggplot(aes(sstmean, peak, col = wave_exposure)) + 
+  mutate(fit_maxima = predict(lm_peak_basic)) %>%
+  ggplot(aes(sstmean, peak)) + 
   geom_point(size = 2) +
   theme_bw(30) +
   xlab(expression("mean SST ("*degree*"C)")) +
-  ylab(expression(log[2.5]*"(peak abundance)")) +
+  ylab(expression(log[sqrt(2)]*"(peak abundance)")) +
   geom_line(aes(y = fit_maxima), size = 1.5) +
   scale_color_manual(values = fig_s3_pal) +
-  labs(col = "Wave exposure")
+  labs(col = "Wave exposure") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
 
 save_as_plot(plot = fig_s3, filename = "fig_s3", output_type = c("png", "eps", "pdf"))
 knitr::include_graphics("output/figs/png/fig_s3.png")
+
+sstrange <- enviro_df$sstmean %>% range(na.rm = T)
+sqrt(2)^predict(lm_peak_basic, newdata = list(sstmean = sstrange))/10
 ```
 
 **Figure S3.1** Relative peaks in abundance occur at certain body sizes in the size spectrum. These peaks in abundance can be predicted by wave exposure and SST. No line of best fit is shown for wave exposure = 4 as this group contained only one site.
@@ -769,51 +972,40 @@ knitr::include_graphics("output/figs/png/fig_s3.png")
 
 **Table S4.2.** Summary of the most important environmental variables explaining the variance each nonlinear model parameter and the amount of variation explained from a multiple linear regression.
 
+
+
 ```{r}
 
 enviro_mod_data <- 
-  nlrq_coefs %>% 
-  left_join(enviro_df, by = "site_code")
+  nls_coefs %>% 
+  left_join(enviro_df, by = "site_code") %>% na.omit()
 
-lm_D      <- lm(D ~ reef_slope, data = enviro_mod_data) 
-lm_A      <- lm(A ~ reef_slope, data = enviro_mod_data) 
-lm_lambda <- lm(lambda ~ wave_exposure  + sstmean, data = enviro_mod_data) 
-lm_peak   <- lm(peak ~ wave_exposure + sstmean, data = enviro_mod_data) 
+
+best_A <- olsrr::ols_step_best_subset(lm(A ~ ., data = enviro_mod_data %>% select(-c(site_code, D, P, beta_0, lambda, peak))) )
+best_D <- olsrr::ols_step_best_subset(lm(D ~ ., data = enviro_mod_data %>% select(-c(site_code, A, P, beta_0, lambda, peak))) )
+best_lambda <- olsrr::ols_step_best_subset(lm(lambda ~ ., data = enviro_mod_data %>% select(-c(site_code, D, P, beta_0, A, peak))) )
+best_peak <- olsrr::ols_step_best_subset(lm(peak ~ ., data = enviro_mod_data %>% select(-c(site_code, D, P, beta_0, lambda, A))) )
+
+best_A$predictors[which.min(best_A$aic)]
+best_D$predictors[which.min(best_D$aic)]
+best_lambda$predictors[which.min(best_lambda$aic)]
+best_peak$predictors[which.min(best_peak$aic)]
+
+lm_A      <- lm(A ~ chlomean + nitrate + phos + wave_exposure + reef_slope, data = enviro_mod_data) 
+lm_D      <- lm(D ~ wave_exposure + relief + reef_slope, data = enviro_mod_data) 
+lm_lambda <- lm(lambda ~ sstmean + chlomean + nitrate + wave_exposure + relief + currents, data = enviro_mod_data) 
+lm_peak   <- lm(peak ~  sstmean + wave_exposure + relief + reef_slope, data = enviro_mod_data) 
 
 get_percent_r2 <- function(lm_mod) ((get_adjr2(lm_mod)*100) %>% round()) %>% paste0(., "%")
 
 tribble(~parameter, ~predictors, ~adj_r_squared,
-        "D", "reef_slope", get_percent_r2(lm_D),
-        "A", "reef_slope", get_percent_r2(lm_A),
-        "lambda", "wave_exposure, sstmean", get_percent_r2(lm_lambda),
-        "peak", "wave_exposure, sstmean", get_percent_r2(lm_peak))
+        "A", best_A$predictors[which.max(best_A$adjr)], get_percent_r2(lm_A),
+        "D", best_D$predictors[which.max(best_A$adjr)], get_percent_r2(lm_D),
+        "lambda", best_lambda$predictors[which.max(best_A$adjr)], get_percent_r2(lm_lambda),
+        "peak", best_peak$predictors[which.max(best_A$adjr)], get_percent_r2(lm_peak))
+
+predict(lm_peak
 
 ```
 
-
-# Edgar (1990) figure
-
-```{r}
-
-edgar_dat <-
-  tibble(
-    sieve_mm = c(0.5, 0.71, 1.0, 1.4, 2.0, 2.8, 4.0, 5.6) %>% log(base = sqrt(2)),
-       afdw = c(0.025, 0.062, 0.153, 0.38, 0.95, 2.39, 6.0, 14.9) %>% log)
-
-
-lm(afdw~sieve_mm, data = edgar_dat)
-
-edgar_dat %>% 
-  ggplot(aes(sieve_mm, afdw)) +
-  geom_point() + 
-  stat_smooth()
-
-
-logs <- (log(0.5)+log(0.71))/2
-logs <- log(0.5)
-exp((- 1.009) + (2.643)*log(2.5))
-
-
-
-```
 
