@@ -301,9 +301,6 @@ lm_comparison_data <-
   mutate(lm2_AIC_delta = lm2_AIC_delta %>% decplaces) %>% 
   select(site_code, lm_AIC_delta, nls_AIC_delta, lm2_AIC_delta, hypothesis)
 
-lm_comparison_data %>% 
-  write_csv("data/processed/lm_comparison.csv")
-
 
 # H1: Sampling bias
 lm_comparison_data %>% 
@@ -319,6 +316,7 @@ lm_comparison_data %>%
 # but the site does not contain any "both" type bins - i.e. is just linear in general
 
 ```
+
 
 
 
@@ -495,12 +493,64 @@ knitr::include_graphics("output/figs/png/fig_1.png")
 
 ## Figure 2
 
+
+```{r}
+
+site_lm <- lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid) + site_code, data = main_df) 
+
+fig2_data <- 
+  main_df %>% 
+  mutate(lm_residuals = sqrt(2)^site_lm$residuals) %>% 
+  mutate(lat_zone = case_when(abs(lat) < 23.5 ~ "Tropical",
+                              TRUE ~ "Temperate")) %>%
+  mutate(lat_zone = as.factor(lat_zone),
+         site_code = as.factor(site_code)) %>%
+  left_join(enviro_df %>% select(site_code, sstmean), by = "site_code")
+
+fig_2 <-
+  fig2_data %>% 
+  ggplot() +
+  aes(x = bin_mid %>% logsqrt2, 
+      y = lm_residuals %>% logsqrt2, 
+      col = sstmean) +
+  geom_point(alpha = 0.2, aes(group = site_code)) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 1, alpha = 0.5, aes(group = site_code)) +
+  ggsci::scale_colour_gsea(breaks = c(15, 20, 25)) +
+  theme_bw(24) +
+  theme(legend.position = c(0.9, 0.2),
+        legend.background = element_rect(fill = "transparent", colour = "black")) +
+  labs(col = "SST (°C)")+
+  xlab("log(body size, mm)") +
+  ylab("Linear model residuals") +
+  # scale_y_continuous(trans = log_trans(base = sqrt(2)),
+  #                    breaks = c(10^c(-4:2)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  # scale_x_continuous(trans = log_trans(base = sqrt(2)),
+  #                    breaks = c(10^c(-5:5)),
+  #                    labels = trans_format("log10", math_format(10^.x))) +
+  geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
+  geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
+            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) 
+
+save_as_plot(plot = fig_2, filename = "fig_2", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_2.png")
+
+```
+
+
+**Figure 3.** Sinusoidal patterns in the residuals of the linear model of the size spectrum. Each line represents a LOESS fit for a given site. Each thin line represents a site, with the colour of line representing the mean annual sea surface temperature (SST) at the site. The two thick lines represent the combined LOESS fit for tropical (red) and temperate sites (blue). 
+
+## Figure 3
+
 ```{r}
 # GBR27
 # NIN-S1
 site_plot_dat <- main_df %>% filter(site_code == "GBR27") %>% left_join(mod_fits) %>% left_join(lm_fits)
 
-fig_2a <- 
+fig_3a <- 
   site_plot_dat %>% 
   mutate(type = factor(type, levels = c("meio", "macro", "both"))) %>% 
   ggplot(aes(bin_mid %>% logsqrt2, norm_density%>% logsqrt2)) +
@@ -540,7 +590,7 @@ fig_2a <-
 
 site_plot_dat2 <- main_df %>% filter(site_code == "NIN-S1") %>% left_join(mod_fits) %>% left_join(lm_fits)
 
-fig_2b <- 
+fig_3b <- 
   site_plot_dat2 %>% 
   mutate(type = case_when(type == "macro" & bin_mid < 54.6 ~ "ommitted",
                           TRUE ~ type)) %>% 
@@ -581,68 +631,85 @@ site_plot_dat2 <- main_df %>% filter(site_code == "NIN-S1") %>% left_join(mod_fi
 
 
 
-fig_2 <- 
+fig_3 <- 
   plot_grid(fig_2a, fig_2b,
             # labels = c('A', 'B'),
             # label_size = 24,
             ncol = 1)
 
-save_as_plot(plot = fig_2, filename = "fig_2", output_type = c("png", "eps", "pdf"), asp_ratio = 1.618/2)
-knitr::include_graphics("output/figs/png/fig_2.png")
-
-```
-
-
-## Figure 3
-
-
-```{r}
-
-site_lm <- lm(logsqrt2(norm_density) ~ logsqrt2(bin_mid) + site_code, data = main_df) 
-
-fig3_data <- 
-  main_df %>% 
-  mutate(lm_residuals = sqrt(2)^site_lm$residuals) %>% 
-  mutate(lat_zone = case_when(abs(lat) < 23.5 ~ "Tropical",
-                              TRUE ~ "Temperate")) %>%
-  mutate(lat_zone = as.factor(lat_zone),
-         site_code = as.factor(site_code)) %>%
-  left_join(enviro_df %>% select(site_code, sstmean), by = "site_code")
-
-fig_3 <-
-  fig3_data %>% 
-  ggplot() +
-  aes(x = bin_mid %>% logsqrt2, 
-      y = lm_residuals %>% logsqrt2, 
-      col = sstmean) +
-  geom_point(alpha = 0.2, aes(group = site_code)) +
-  geom_line(stat= "smooth", method = "loess", se=F, size = 1, alpha = 0.5, aes(group = site_code)) +
-  ggsci::scale_colour_gsea(breaks = c(15, 20, 25)) +
-  theme_bw(24) +
-  theme(legend.position = c(0.9, 0.2),
-        legend.background = element_rect(fill = "transparent", colour = "black")) +
-  labs(col = "SST (°C)")+
-  xlab("log(body size, mm)") +
-  ylab("Linear model residuals") +
-  # scale_y_continuous(trans = log_trans(base = sqrt(2)),
-  #                    breaks = c(10^c(-4:2)),
-  #                    labels = trans_format("log10", math_format(10^.x))) +
-  # scale_x_continuous(trans = log_trans(base = sqrt(2)),
-  #                    breaks = c(10^c(-5:5)),
-  #                    labels = trans_format("log10", math_format(10^.x))) +
-  geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
-  geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) +
-  theme(panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank()) 
-
-save_as_plot(plot = fig_3, filename = "fig_3", output_type = c("png", "eps", "pdf"))
+save_as_plot(plot = fig_3, filename = "fig_3", output_type = c("png", "eps", "pdf"), asp_ratio = 1.618/2)
 knitr::include_graphics("output/figs/png/fig_3.png")
 
 ```
+## Figure 4
 
-**Figure 3.** Sinusoidal patterns in the residuals of the linear model of the size spectrum. Each line represents a LOESS fit for a given site. Each thin line represents a site, with the colour of line representing the mean annual sea surface temperature (SST) at the site. The two thick lines represent the combined LOESS fit for tropical (red) and temperate sites (blue). 
+```{r}
+
+
+fig_4_data <- 
+  lm_output %>% 
+  select(site_code, lm_AIC) %>% 
+  left_join(nls_output %>% 
+              select(site_code, nls_AIC)) %>% 
+  left_join(lm_output2 %>% 
+              select(site_code, lm2_AIC)) %>% 
+  mutate(hypothesis = case_when(lm2_AIC < lm_AIC & lm2_AIC < nls_AIC ~ "H1",
+                                nls_AIC <= lm_AIC & nls_AIC <= lm2_AIC ~ "H2", 
+                                lm_AIC <= lm2_AIC & lm_AIC <= nls_AIC ~ "NA")) %>% 
+  mutate(lm_AIC_delta = lm_AIC-lm_AIC) %>% 
+  mutate(nls_AIC_delta = nls_AIC-lm_AIC) %>% 
+  mutate(lm2_AIC_delta = lm2_AIC-lm_AIC) %>% 
+  mutate(lm_AIC_delta = lm_AIC_delta %>% decplaces) %>% 
+  mutate(nls_AIC_delta = nls_AIC_delta %>% decplaces) %>% 
+  mutate(lm2_AIC_delta = lm2_AIC_delta %>% decplaces) %>% 
+  mutate(lm_AIC_forsorting = lm_AIC) %>% 
+  pivot_longer(cols = c(lm_AIC, nls_AIC, lm2_AIC), 
+               names_to = "model",
+               values_to = "AIC")  
+
+x_title_cols <- 
+  fig_4_data %>% 
+  mutate(cols = case_when(hypothesis == "H1"~ "#E69F00",
+                          hypothesis == "H2"~ "#56B4E9",
+                          hypothesis == "H3"~ "grey40",
+                          TRUE ~ "grey80")) %>% 
+  arrange(desc(lm_AIC_forsorting)) %>% 
+  select(site_code, cols) %>% 
+  distinct() %>% 
+  pull(cols)
+
+fig_4 <- 
+  fig_4_data %>% 
+  ggplot(aes(forcats::fct_reorder(site_code, desc(lm_AIC_forsorting)), AIC, col = model)) +
+  geom_point(position = position_dodge(width = 0.4), size = 3) +
+  theme_bw(24) +
+  xlab("Site") +
+  theme(
+    panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        # panel.border = element_blank(), 
+        axis.text.x=element_text(angle=90, vjust=0.5, hjust=1, size = 18,
+                              colour = x_title_cols),
+        legend.position = c(1, 1),
+        legend.text = element_text(size = 18),
+        legend.title = element_blank(),
+        legend.justification = c(1,1),
+        legend.background = element_rect(colour = "transparent", fill = "transparent")) +
+  scale_color_manual(labels = c(expression(paste("Linear model; ",H[3])), 
+                                expression(paste("Linear model (exclusion); ",H[1])), 
+                                expression(paste("Nonlinear model; ",H[2]))), 
+                     values=c("grey40", "#E69F00", "#56B4E9")) +
+  guides(col = guide_legend(title.position = "top", 
+                            # hjust = 0.5 centres the title horizontally
+                            title.hjust = 0.8,
+                            label.position = "left")) 
+  
+
+save_as_plot(plot = fig_4, filename = "fig_4", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_4.png")
+  
+```
+
 
 
 ## Information for text
@@ -695,7 +762,7 @@ nls_coefs %>%
 
 # Supplementary 
 
-## Figure S1.1
+## Figure S1
 
 
 ```{r}
@@ -767,7 +834,7 @@ site_labels <-
                                TRUE ~ mean_lat))
 
 
-fig_s1_1_map_empty <-
+fig_s1_map_empty <-
   ggplot(data = ne_countries(scale = "medium", returnclass = "sf")) +
   geom_sf() +
   coord_sf(xlim = c(140, 178), ylim = c(-45, -10), expand = FALSE) +
@@ -779,8 +846,8 @@ fig_s1_1_map_empty <-
   theme(panel.grid.major = element_line(colour = "grey90")) 
 
 
-fig_s1_1_map <- 
-  fig_s1_1_map_empty +
+fig_s1_map <- 
+  fig_s1_map_empty +
   geom_point(data = main_df, aes(x = lon, y = lat, fill = ecoregion), 
              size = 6, alpha = 0.5, pch = 21, col = "black") + 
   geom_text(aes(x = label_lon, y = label_lat, label = site_label, colour = ecoregion), 
@@ -814,7 +881,7 @@ for(i in 1:5){
                      lat = empty_sites_lat - c(0.00001, 0.00002,0.00003)))
 }
 
-fig_s1_1_data <- 
+fig_s1_data <- 
   main_df %>%
   bind_rows(empty_sites) %>% 
   mutate(site_ord = factor(site_code, levels = sites_desc_lat)) %>% 
@@ -822,18 +889,18 @@ fig_s1_1_data <-
 
 # have to do this again for the new dataframe (with empty sites)
 sites_desc_lat_new <- 
-  fig_s1_1_data %>% 
+  fig_s1_data %>% 
   arrange(desc(lat)) %>% 
   pull(site_code) %>% 
   unique()
 
-fig_s1_1_plots <- 
-  fig_s1_1_data %>% 
+fig_s1_plots <- 
+  fig_s1_data %>% 
   mutate(site_ord = factor(site_code, levels = sites_desc_lat_new)) %>% 
   ggplot(aes(bin_mid %>% logsqrt2, norm_density%>% logsqrt2)) +
-  geom_point(data = fig_s1_1_data %>% filter(type == "meio"), col = meio_col) +
-  geom_point(data = fig_s1_1_data %>% filter(type == "macro"), col = macr_col) +
-  geom_point(data = fig_s1_1_data %>% filter(type == "both"), col = both_col) +
+  geom_point(data = fig_s1_data %>% filter(type == "meio"), col = meio_col) +
+  geom_point(data = fig_s1_data %>% filter(type == "macro"), col = macr_col) +
+  geom_point(data = fig_s1_data %>% filter(type == "both"), col = both_col) +
   facet_wrap(~site_ord) + 
   xlab("log(body size)") +
   ylab("log(normalised abundance)") +
@@ -855,7 +922,7 @@ fig_s1_1_plots <-
 
 rect <- grid::rectGrob(gp = grid::gpar(fill = "transparent"), width = .39, height = .09, x = .55, y = 0.125, hjust = 0, vjust = 0.5)
 
-fig_s1_1_legend_graphics <- 
+fig_s1_legend_graphics <- 
   list(
     draw_image(fish_image, 
                x = 0.35, 
@@ -876,15 +943,15 @@ fig_s1_1_legend_graphics <-
   )
 
 
-fig_s1_1 <-
+fig_s1 <-
   ggdraw() + 
-  draw_plot(fig_s1_1_plots) +
+  draw_plot(fig_s1_plots) +
   geom_rect(aes(xmin = 0.65, xmax = 0.99, ymin = 0.42, ymax = 0.99), fill = "white") +
-  draw_plot(fig_s1_1_map, x = 0.615, y = 0.432, width = 0.4, height = 0.55) +
-  fig_s1_1_legend_graphics
+  draw_plot(fig_s1_map, x = 0.615, y = 0.432, width = 0.4, height = 0.55) +
+  fig_s1_legend_graphics
 
-save_as_plot(plot = fig_s1_1, filename = "fig_s1_1", output_type = c("png", "eps", "pdf"))
-knitr::include_graphics("output/figs/png/fig_s1_1.png")
+save_as_plot(plot = fig_s1, filename = "fig_s1", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s1.png")
 
 ```
 
@@ -893,7 +960,7 @@ knitr::include_graphics("output/figs/png/fig_s1_1.png")
 
 ```{r}
 
-fig_s1_2 <- 
+fig_s2 <- 
   mod_fits %>% 
   left_join(main_df %>% 
               mutate(lm_fit = sqrt(2)^predict(site_lm))) %>% 
@@ -921,14 +988,14 @@ fig_s1_2 <-
         panel.grid.minor = element_blank()) 
 
 
-save_as_plot(plot = fig_s1_2, filename = "fig_s1_2", output_type = c("png", "eps", "pdf"))
-knitr::include_graphics("output/figs/png/fig_s1_2.png")
+save_as_plot(plot = fig_s2, filename = "fig_s2", output_type = c("png", "eps", "pdf"))
+knitr::include_graphics("output/figs/png/fig_s2.png")
 
 ```
 
 **Figure S1.1** Continuous abundance size spectrum spanning 11 orders of magnitude in body size, with a fitted linear model (black, Equation S1.1) and non-linear model (red, Equation 1 in main text). 
 
-## Figure S3.1
+## Figure S3
 
 ```{r}
 
@@ -964,6 +1031,7 @@ knitr::include_graphics("output/figs/png/fig_s3.png")
 
 sstrange <- enviro_df$sstmean %>% range(na.rm = T)
 sqrt(2)^predict(lm_peak_basic, newdata = list(sstmean = sstrange))/10
+
 ```
 
 **Figure S3.1** Relative peaks in abundance occur at certain body sizes in the size spectrum. These peaks in abundance can be predicted by wave exposure and SST. No line of best fit is shown for wave exposure = 4 as this group contained only one site.
@@ -1003,8 +1071,6 @@ tribble(~parameter, ~predictors, ~adj_r_squared,
         "D", best_D$predictors[which.max(best_A$adjr)], get_percent_r2(lm_D),
         "lambda", best_lambda$predictors[which.max(best_A$adjr)], get_percent_r2(lm_lambda),
         "peak", best_peak$predictors[which.max(best_A$adjr)], get_percent_r2(lm_peak))
-
-predict(lm_peak
 
 ```
 
