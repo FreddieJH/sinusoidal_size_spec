@@ -529,9 +529,9 @@ fig_2 <-
   #                    breaks = c(10^c(-5:5)),
   #                    labels = trans_format("log10", math_format(10^.x))) +
   geom_line(stat= "smooth", method = "loess", se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
+            data = fig2_data %>% filter(lat_zone == "Tropical"), col = mypal[4]) +
   geom_line(stat= "smooth", method = "loess",se=F, size = 3, alpha = 1, 
-            data = fig3_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) +
+            data = fig2_data %>% filter(lat_zone == "Temperate"), col = mypal[1]) +
   theme(panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank()) 
 
@@ -632,7 +632,7 @@ site_plot_dat2 <- main_df %>% filter(site_code == "NIN-S1") %>% left_join(mod_fi
 
 
 fig_3 <- 
-  plot_grid(fig_2a, fig_2b,
+  plot_grid(fig_3a, fig_3b,
             # labels = c('A', 'B'),
             # label_size = 24,
             ncol = 1)

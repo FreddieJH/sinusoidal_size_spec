@@ -1,0 +1,207 @@
+TAXA CODE,TAXA,BROAD.TAXA,BR.TAXA,MACRO/MEIO,VBroadTaxa,TAXONOMIC LEVEL
+AMP1,Amphipoda - non-caprellid,AMP1,Amphipoda - non-caprellid,meio,Peracarida,Order
+CAO3,Ochlesidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAA1,Amphithoidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAB1,Amphilochidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAC2,Colomastigidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAD1,Dexaminidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAD2,Dogielinotidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAE1,Eusiridae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAE2,Eophliantidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAH1,Hyalidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAI1,Isaidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAI2,Ischyroceridae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAI3,Iphimediidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,family
+CAI4,Idoteidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAL1,Lyssianasidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAL2,Leucothoidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAM1,Melitidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAO1,Aoridae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAO2,Oedicerotidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAP5,Photidae ? Check ID,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAP1,Podoceridae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAP2,Prophliantinae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAP3,Phliantidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAP4,Phoxocephalidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAP6,Photidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAP7,Paracalliopiidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAP8,Pagetinidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAT3,Thaumatelsonidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAR1,Corophiidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAS1,Stenothoidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAS2,Synopiidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAT1,Atylidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAT2,Astacillidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAX34,"Sturdy body, big claws, thick antennae - check ID",AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAX1,Phliantidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAX35,"Amphipod/red eyes, no 2nd antennae, big claws",AMP1,Amphipoda - non-caprellid,macro,Peracarida,
+CAY1,Cyproideidae,AMP1,Amphipoda - non-caprellid,macro,Peracarida,Family
+CAC1,Caprellidae,AMP2,Amphipoda - caprellid,macro,Peracarida,Family
+AMP2,Amphipoda - caprellid,AMP2,Amphipoda - caprellid,meio,Peracarida,Order
+CPT1,Phtisicidae,AMP2,Amphipoda - caprellid,macro,Peracarida,Family
+ANT,Anthozoa,ANT,Anthozoa,meio,Other,
+CNE1,Edwardsiidae,ANT,Anthozoa,macro,Other,
+CNS1,Staurozoa,ANT,Anthozoa,macro,Other,Class
+CNA1,??Actiniidae,ANT,Anthozoa,macro,Other,Family
+AST,Asteroidea,AST,Asteroidea,meio,Other,Class
+EAA1,Asteriidae,AST,Asteroidea,macro,Other,
+EAG1,Goniasteridae,AST,Asteroidea,macro,Other,Family
+ECA1,Asterinidae,AST,Asteroidea,macro,Other,Family
+ECE1,??Echinasteridae,AST,Asteroidea,macro,Other,Family
+BIV,Bivalvia,BIV,Bivalvia,meio,Other,Class
+MBA1,Arcidae,BIV,Bivalvia,macro,Other,
+MBP2,Pteriidae,BIV,Bivalvia,macro,Other,
+MBC1,Condylocardiidae,BIV,Bivalvia,macro,Other,Family
+MBC2,Carditidae,BIV,Bivalvia,macro,Other,Family
+MBG1,Galeommatidae,BIV,Bivalvia,macro,Other,Family
+MBH1,Hiatellidae,BIV,Bivalvia,macro,Other,Family
+MBL1,Limidae,BIV,Bivalvia,macro,Other,Family
+MBM1,Mytilidae,BIV,Bivalvia,macro,Other,Family
+MBP1,Pectinidae,BIV,Bivalvia,macro,Other,Family
+MBT1,Tellinidae,BIV,Bivalvia,macro,Other,Family
+MBT2,Trigoniidae,BIV,Bivalvia,macro,Other,Family
+MBV1,Veneridae,BIV,Bivalvia,macro,Other,Family
+MCI2,Idiosepiidae,CEP,Cephalopoda,macro,Other,family
+MCI1,Ischnochitonidae,CHI,Chitonida,macro,Other,Family
+ACH1,Hirudinea,CLIT,Clitellata ,macro,Other,
+CCA1,Antedonidae,CRI,Crinoidea,macro,Other,Family
+CCB1,Bodotriidae,CUM,Cumacea,macro,Peracarida,Family
+CCD2,Dialstylidae,CUM,Cumacea,macro,Peracarida,Family
+CUM,Cumacea,CUM,Cumacea,meio,Peracarida,Order
+CDA1,Alpheidae,DEC,Decapoda,macro,Decapoda,Family
+CDG1,Galatheidae,DEC,Decapoda,macro,Decapoda,Family
+CDH1,Hymenosomatidae,DEC,Decapoda,macro,Decapoda,Family
+CDM1,Majidae ,DEC,Decapoda,macro,Decapoda,decorator crab
+CDP1,Palaemonidae,DEC,Decapoda,macro,Decapoda,Family
+CDP2,Porcellanidae,DEC,Decapoda,macro,Decapoda,Family
+CDT1,Trapeziidae,DEC,Decapoda,macro,Decapoda,Family
+CDD1,Dromiidae,DEC,Decapoda,macro,Decapoda,
+CDH2,Hippolytidae,DEC,Decapoda,macro,Decapoda,
+CDP10,red and white crab from Solitaries - check ID,DEC,Decapoda,macro,Decapoda,
+CDP3,Pandalidae,DEC,Decapoda,macro,Decapoda,
+CDX1,"Decapod/big eyes, weird separated head",DEC,Decapoda,macro,Decapoda,
+CDX2,"Decapol/big wings, small tail",DEC,Decapoda,macro,Decapoda,
+CHE1,Paguroidea,DEC,Decapoda,macro,Decapoda,Superfamily
+DEC,Decapoda,DEC,Decapoda,meio,Decapoda,Order
+ECE2,Echinometridae,ECH,Echinoidea,macro,Other,Family
+ECT1,Temnopleuridae,ECH,Echinoidea,macro,Other,Family
+EUN,Eunicida ,EUN,Eunicida ,meio,Other,Class
+FOR,Foraminifera,FOR,Foraminifera,both,Other,Subphylum
+FXX2,Clinidae,FXX,Fish,macro,Other,
+FXX1,Gobiesocidae,FXX,Fish,macro,Other,Family
+MGA1,Assiminidae,GAS,Gastropoda,macro,Other,
+MGA2,Aeolidae,GAS,Gastropoda,macro,Other,
+MGC3,Cancellariidae,GAS,Gastropoda,macro,Other,
+MGE3,Eatoniellidae,GAS,Gastropoda,macro,Other,
+MGF2,Flabellinidae,GAS,Gastropoda,macro,Other,
+MGH2,Hydrobiidae,GAS,Gastropoda,macro,Other,
+MGL1,Lottidae,GAS,Gastropoda,macro,Other,
+MGM4,Marginellidae,GAS,Gastropoda,macro,Other,
+MGP2,Pleurobranchus,GAS,Gastropoda,macro,Other,
+MGR3,Rissoidae,GAS,Gastropoda,macro,Other,
+MGT2,Turbinellidae,GAS,Gastropoda,macro,Other,
+MGT3,Triphoridae,GAS,Gastropoda,macro,Other,
+MGX1,Gastropod no ID,GAS,Gastropoda,both,Other,
+MSH1,Sea Hare - check ID,GAS,Gastropoda,both,Other,
+MGB1,Buccinidae,GAS,Gastropoda,macro,Other,Family
+MGB2,Barleiidae,GAS,Gastropoda,macro,Other,Family
+MGC1,Cerithiidae,GAS,Gastropoda,macro,Other,Family
+MGC2,Cypraeidae ,GAS,Gastropoda,macro,Other,Family
+MGD1,Dialidae,GAS,Gastropoda,macro,Other,Family
+MGE1,Eulimidae,GAS,Gastropoda,macro,Other,Family
+MGE2,Epitoniidae,GAS,Gastropoda,macro,Other,Family
+MGF1,Fasciolariidae,GAS,Gastropoda,macro,Other,Family
+MGH1,Hypponicidae,GAS,Gastropoda,macro,Other,Family
+MGM2,Muricidae,GAS,Gastropoda,macro,Other,Family
+MGM3,Mangeliidae,GAS,Gastropoda,macro,Other,Family
+GAS,Gastropoda,GAS,Gastropoda,meio,Other,Class
+MGN1,Nassariidae,GAS,Gastropoda,macro,Other,Family
+MGN2,Neritidae,GAS,Gastropoda,macro,Other,Family
+MGO1,Columbellidae,GAS,Gastropoda,macro,Other,Family
+MGP1,Patelloidea,GAS,Gastropoda,macro,Other,Family
+MGR1,Retusidae,GAS,Gastropoda,macro,Other,Family
+MGR2,Ranellidae,GAS,Gastropoda,macro,Other,family
+MGS1,Styliphorinidae,GAS,Gastropoda,macro,Other,Family
+MGT1,Trochidae,GAS,Gastropoda,macro,Other,Family
+MGU1,Turbinidae,GAS,Gastropoda,macro,Other,Family
+MGV1,Volutidae,GAS,Gastropoda,macro,Other,Family
+MGY1,Cystiscidae,GAS,Gastropoda,macro,Other,Family
+MLF1,Fisurellidae,GAS,Gastropoda,macro,Other,family
+MNL1,Limapotiidae,GAS,Gastropoda,macro,Other,Family
+MOD1,??Dotidae,GAS,Gastropoda,macro,Other,Family
+MOD2,Dendrodorididae,GAS,Gastropoda,macro,Other,Family
+MOP1,Plakobranchidae,GAS,Gastropoda,macro,Other,Family
+HARP,Harpacticoida,HARP,Harpacticoida,meio,Harpacticoida,Order
+CHT1,Tisbidae,HARP,Harpacticoida,macro,Harpacticoida,Family
+HOL,Holothuroidea,HOL,Holothuroidea,meio,Other,Family
+ECC1,Cucumariidae,HOL,Holothuroidea,macro,Other,Family
+ECS1,Synaptidae,HOL,Holothuroidea,macro,Other,Family
+ECS2,Stichopodidae,HOL,Holothuroidea,macro,Other,Family
+ITR1,Trichoptera,INS,Insecta,macro,Other,order
+ISO,Isopoda,ISO,Isopoda,meio,Peracarida,Order
+CIA1,Anthuridae,ISO,Isopoda,macro,Peracarida,Family
+CIA2,Astacillidae,ISO,Isopoda,macro,Peracarida,Family
+CIC1,??Crangonyctidae,ISO,Isopoda,macro,Peracarida,Family
+CIJ1,Janiridae,ISO,Isopoda,macro,Peracarida,Family
+CIL1,Limnoriadae,ISO,Isopoda,macro,Peracarida,Family
+CIM1,Munnidae,ISO,Isopoda,macro,Peracarida,Family
+CIS1,Sphaeromatidae,ISO,Isopoda,macro,Peracarida,Family
+CIJ2,Jassidae,ISO,Isopoda,macro,Peracarida,
+CIJ3,Jaeropsidae,ISO,Isopoda,macro,Peracarida,
+CIP1,Paranthuridae,ISO,Isopoda,macro,Peracarida,
+CIX4,"Isopod/big black eyes, long sphaeromatid-like",ISO,Isopoda,macro,Peracarida,
+CMY1,Mysidae,MYS,Mysida,macro,Peracarida,Family
+MYS,Mysida,MYS,Mysida,meio,Peracarida,Order
+NEM,Nematoda,NEM,Nematoda,meio,Other,Phyla 
+WNX1,Nemertea,NET,Nemertea,macro,Other,Phyla 
+NET,Nemertea,NET,Nemertea,meio,Other,Phyla 
+EOA1,Amphiuridae,OPH,Ophiuroidea,macro,Other,Family
+EOO1,Ophiomyxidae,OPH,Ophiuroidea,macro,Other,Family
+EOO2,Ophiocomidae,OPH,Ophiuroidea,macro,Other,Family
+EOO3,Ophiotrichidae,OPH,Ophiuroidea,macro,Other,Family
+EOO4,Ophiactidae,OPH,Ophiuroidea,macro,Other,Family
+OPH,Ophiuroidea,OPH,Ophiuroidea,meio,Other,Order
+COP1,Philomedidae,OST,Ostracoda,macro,Other,Family
+COR1,Oribatida,OST,Ostracoda,both,Other,Suborder
+COS1,"Ostracod sp/ white, large (1.4mm)",OST,Ostracoda,macro,Other,
+COS2,Ostracod sp/big black spot in 1mm,OST,Ostracoda,macro,Other,
+COS3,brown ostracod 1 mm,OST,Ostracoda,macro,Other,
+COS4,"Ostracod/1mm white, looks like a scallop",OST,Ostracoda,macro,Other,
+OST,Ostracoda,OST,Ostracoda,meio,Other,Class
+PHY,Phyllodocida,PHY,Phyllodocida,meio,Other,Order
+PLA,Platyhelmithes,PLA,Platyhelmithes,both,Other,Phyla 
+WPC2,Chrysopetalidae,POL,Polychaeta,macro,Other,
+WPL1,Lumbrineridae,POL,Polychaeta,macro,Other,
+WPP2,Phyllodocidae,POL,Polychaeta,macro,Other,
+WPA1,Opheliidae,POL,Polychaeta,macro,Other,Family
+WPC1,Capitellidae,POL,Polychaeta,macro,Other,Family
+WPE1,Eunicidae,POL,Polychaeta,macro,Other,Family
+WPH1,Hesionidae,POL,Polychaeta,macro,Other,Family
+WPI1,Sabellidae,POL,Polychaeta,macro,Other,Family
+WPM1,Maldanidae,POL,Polychaeta,macro,Other,Family
+WPN1,Nereididae,POL,Polychaeta,macro,Other,Family
+WPP1,Polynoidae,POL,Polychaeta,macro,Other,Family
+POL,Polychaeta,POL,Polychaeta,meio,Other,Class
+WPR1,Cirratulidae,POL,Polychaeta,macro,Other,Family
+WPS1,Syllidae,POL,Polychaeta,macro,Other,Family
+PYC,Pycnogonida,PYC,Pycnogonida,meio,Other,Class
+CPA1,Ammotheidae,PYC,Pycnogonida,macro,Other,Family
+CPG1,Pycnogonidae,PYC,Pycnogonida,macro,Other,Family
+CPA2,Acheliidae,PYC,Pycnogonida,macro,Other,
+CPA3,Anoplodactylidae,PYC,Pycnogonida,macro,Other,
+CPP1,Pseudopallenidae,PYC,Pycnogonida,macro,Other,
+SAB,Sabellida,SAB,Sabellida,meio,Other,Order
+WPS2,Spirorbidae,SAB,Sabellida,macro,Other,
+WCS1,Spadellidae,SAG,Sagittoidea ,macro,Other,Family
+SED,Sedentaria,SED,Sedentaria,meio,Other,Family
+TAN,Tanaidacea,TAN,Tanaidacea,meio,Peracarida,Order
+CTL1,Leptocheliidae,TAN,Tanaidacea,macro,Peracarida,Family
+CTM1,??Metapseudidae,TAN,Tanaidacea,macro,Peracarida,Family
+CTP1,Pagurapseudidae,TAN,Tanaidacea,macro,Peracarida,Family
+CTT1,Tanaididae,TAN,Tanaidacea,macro,Peracarida,Family
+CTW1,Whiteleggidae,TAN,Tanaidacea,macro,Peracarida,Family
+CTN1,Nototanaidae,TAN,Tanaidacea,macro,Peracarida,
+CTZ1,Zeuxoidae,TAN,Tanaidacea,macro,Peracarida,
+TER,Terebellida,TER,Terebellida,meio,Other,Order
+WPT1,Terebellidae,TER,Terebellida,macro,Other,Family
+WXX1,"worm?  Larvae of some kind, dark bands on body, 2 thick, short antennae",WXX,unknown worm,both,Other,
