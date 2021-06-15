@@ -1,4 +1,4 @@
-# sinusoidal_size_spec
+# Sinusoidal reef size spectra
 
 The code used to recreate the figures in study titled: 
 
@@ -6,4 +6,6 @@ The code used to recreate the figures in study titled:
 
 - Make sure you are working the sinusoidal_size_spec.Rproj project.
 
-- Data for the analyses will be made publically available upon acceptance of the manuscript
+
+
+https://zenodo.org/badge/341452268.svg 
